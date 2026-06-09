@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { signOut } from "@/app/auth/actions";
+import { syncTasksToMicrosoft } from "@/lib/microsoft/syncTasks";
+import { fetchMicrosoftTasks } from "@/lib/microsoft/fetchTasks";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -13,15 +15,15 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-/* ---------- to-do ---------- */
-type Task = { name: string; time: string; done: boolean };
+/* ---------- task ---------- */
+type Task = { name: string; time: string; done: boolean; starred: boolean };
 const INITIAL_TASKS: Task[] = [
-  { name: "Review PRD draft", time: "09:30", done: true },
-  { name: "Design sync with dev", time: "11:00", done: true },
-  { name: "Gym – push day", time: "13:00", done: false },
-  { name: "Ship dashboard mockups", time: "15:30", done: false },
-  { name: "Write weekly notes", time: "18:00", done: false },
-  { name: "Read 20 pages", time: "21:30", done: false },
+  { name: "Review PRD draft", time: "09:30", done: true, starred: true },
+  { name: "Design sync with dev", time: "11:00", done: true, starred: true },
+  { name: "Gym – push day", time: "13:00", done: false, starred: true },
+  { name: "Ship dashboard mockups", time: "15:30", done: false, starred: true },
+  { name: "Write weekly notes", time: "18:00", done: false, starred: false },
+  { name: "Read 20 pages", time: "21:30", done: false, starred: false },
 ];
 
 /* ---------- habits ---------- */
@@ -75,7 +77,45 @@ function PauseIcon() {
   );
 }
 
-export default function Dashboard({ email }: { email: string }) {
+function PinIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: "rotate(45deg)" }}>
+      <line x1="12" y1="17" x2="12" y2="22" />
+      <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
+    </svg>
+  );
+}
+
+function PinOffIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: "rotate(45deg)" }}>
+      <line x1="12" y1="17" x2="12" y2="22" />
+      <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
+      <line x1="2" y1="12" x2="22" y2="12" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  );
+}
+
+export default function Dashboard({ email, microsoftConnected }: { email: string; microsoftConnected: boolean }) {
+  /* ---------- screen ---------- */
+  const [screen, setScreen] = useState<"home" | "tasks">("home");
+
+  /* ---------- microsoft sync ---------- */
+  const [syncing, startSync] = useTransition();
+  const [syncStatus, setSyncStatus] = useState<"idle" | "success" | "error">("idle");
+  const isFirstRender = useRef(true);
+
   /* ---------- clock ---------- */
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
@@ -90,34 +130,97 @@ export default function Dashboard({ email }: { email: string }) {
     ? `${DAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`.toUpperCase()
     : "";
 
-  /* ---------- to-do ---------- */
+  /* ---------- tasks (shared between screens) ---------- */
   const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const addInputRef = useRef<HTMLInputElement>(null);
+  const tasksAddInputRef = useRef<HTMLInputElement>(null);
+  const [tasksAdding, setTasksAdding] = useState(false);
+  const [tasksDraft, setTasksDraft] = useState("");
 
   useEffect(() => {
     if (adding) addInputRef.current?.focus();
   }, [adding]);
 
+  useEffect(() => {
+    if (tasksAdding) tasksAddInputRef.current?.focus();
+  }, [tasksAdding]);
+
   function toggleTask(i: number) {
     setTasks((prev) => prev.map((t, idx) => (idx === i ? { ...t, done: !t.done } : t)));
+  }
+
+  function toggleStar(i: number) {
+    setTasks((prev) => prev.map((t, idx) => (idx === i ? { ...t, starred: !t.starred } : t)));
+  }
+
+  function deleteTask(i: number) {
+    setTasks((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   function finishAdd(commit: boolean) {
     const trimmed = draft.trim();
     if (commit && trimmed) {
       const d = new Date();
-      setTasks((prev) => [...prev, { name: trimmed, time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, done: false }]);
+      setTasks((prev) => [...prev, { name: trimmed, time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, done: false, starred: false }]);
     }
     setAdding(false);
     setDraft("");
   }
 
-  const doneCount = tasks.filter((t) => t.done).length;
-  const progressPct = Math.round((doneCount / tasks.length) * 100);
+  function finishTasksAdd(commit: boolean) {
+    const trimmed = tasksDraft.trim();
+    if (commit && trimmed) {
+      const d = new Date();
+      setTasks((prev) => [...prev, { name: trimmed, time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, done: false, starred: false }]);
+    }
+    setTasksAdding(false);
+    setTasksDraft("");
+  }
 
-  /* ---------- quick note / capture ---------- */
+  // On mount, fetch tasks from Microsoft and merge any new ones in
+  useEffect(() => {
+    if (!microsoftConnected) return;
+    fetchMicrosoftTasks().then((remoteTasks) => {
+      if (!remoteTasks.length) return;
+      setTasks((prev) => {
+        const existingNames = new Set(prev.map((t) => t.name));
+        const newTasks = remoteTasks
+          .filter((rt) => !existingNames.has(rt.name))
+          .map((rt) => ({
+            name: rt.name,
+            time: "--:--",
+            done: rt.done,
+            starred: false,
+          }));
+        // Also update done status for tasks that exist in both places
+        const updated = prev.map((t) => {
+          const remote = remoteTasks.find((rt) => rt.name === t.name);
+          return remote ? { ...t, done: remote.done } : t;
+        });
+        return [...updated, ...newTasks];
+      });
+      isFirstRender.current = false;
+    });
+  }, []);
+
+  // Auto-sync to Microsoft on every task change (skip the initial mount)
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    if (!microsoftConnected) return;
+    startSync(async () => {
+      const result = await syncTasksToMicrosoft(tasks);
+      setSyncStatus(result.success ? "success" : "error");
+      setTimeout(() => setSyncStatus("idle"), 3000);
+    });
+  }, [tasks]);
+
+  const starredTasks = tasks.filter((t) => t.starred);
+  const doneCount = starredTasks.filter((t) => t.done).length;
+  const progressPct = starredTasks.length ? Math.round((doneCount / starredTasks.length) * 100) : 0;
+
+  /* ---------- quick note ---------- */
   const [note, setNote] = useState(
     "Ship the v2 dashboard before standup. Ping Dana re: the nutrition API quota — we're at 80% for June. Don't forget to water the monstera 🌱"
   );
@@ -202,257 +305,404 @@ export default function Dashboard({ email }: { email: string }) {
           <div className="name">NeeyazOS</div>
           <div className="sub">Personal operating system</div>
         </div>
-        <div className="crumb">Tasks&nbsp;&nbsp;/&nbsp;&nbsp;<b>Home</b></div>
+        <nav className="screen-nav">
+          <button
+            className={"screen-nav-btn" + (screen === "home" ? " active" : "")}
+            onClick={() => setScreen("home")}
+          >
+            Home
+          </button>
+          <span className="screen-nav-sep">|</span>
+          <button
+            className={"screen-nav-btn" + (screen === "tasks" ? " active" : "")}
+            onClick={() => setScreen("tasks")}
+          >
+            Tasks
+          </button>
+        </nav>
         <div className="topclock num">{now ? `${clockStr}:${secStr}` : "--:--:--"}</div>
       </header>
 
-      <div className="grid">
-        {/* ===== LEFT ===== */}
-        <div className="col">
-          <div className="card profile">
-            <div className="avatar">NA</div>
-            <div>
-              <h2>Neeyaz Ahmed</h2>
-              <div className="role">{email || "Product designer"}</div>
-              <div className="pills">
-                <span className="pill">Focused</span>
-                <span className="pill rose"><span className="num">12</span>-day streak</span>
+      {screen === "home" ? (
+        <div className="grid">
+          {/* ===== LEFT ===== */}
+          <div className="col">
+            <div className="card profile">
+              <div className="avatar">NA</div>
+              <div>
+                <h2>Neeyaz Ahmed</h2>
+                <div className="role">{email || "Product designer"}</div>
+                <div className="pills">
+                  <span className="pill">Focused</span>
+                  <span className="pill rose"><span className="num">12</span>-day streak</span>
+                </div>
+                <a
+                  href={microsoftConnected ? undefined : "/auth/microsoft"}
+                  className={"ms-connect-btn" + (microsoftConnected ? " connected" : "")}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                    <rect x="1" y="1" width="10" height="10" fill="#f25022"/>
+                    <rect x="13" y="1" width="10" height="10" fill="#7fba00"/>
+                    <rect x="1" y="13" width="10" height="10" fill="#00a4ef"/>
+                    <rect x="13" y="13" width="10" height="10" fill="#ffb900"/>
+                  </svg>
+                  {microsoftConnected ? "Microsoft To Do connected" : "Connect Microsoft To Do"}
+                </a>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-head">
+                <div className="card-title">To-Do List</div>
+                <span className="tag plain"><span className="num">{doneCount}/{starredTasks.length}</span></span>
+              </div>
+              <div className="todo-prog">
+                <div className="bar"><i style={{ width: `${progressPct}%` }} /></div>
+              </div>
+              <div className="todo-list">
+                {starredTasks.map((t, i) => (
+                  <div
+                    key={i}
+                    className={"todo-item" + (t.done ? " done" : "")}
+                    onClick={() => toggleTask(tasks.indexOf(t))}
+                  >
+                    <span className="check"><CheckIcon /></span>
+                    <span className="name">{t.name}</span>
+                    <span className="time">{t.time}</span>
+                  </div>
+                ))}
+              </div>
+              {adding ? (
+                <input
+                  ref={addInputRef}
+                  className="add-input"
+                  placeholder="Task name, then Enter…"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") finishAdd(true);
+                    if (e.key === "Escape") finishAdd(false);
+                  }}
+                  onBlur={() => finishAdd(true)}
+                />
+              ) : (
+                <button className="add-task" onClick={() => setAdding(true)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  Add task
+                </button>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="card-head">
+                <span className="tag rose">Quick Note</span>
+              </div>
+              <p className="note-body">{note}</p>
+              <div className="note-divider" />
+              <div className="capture">
+                <input
+                  type="text"
+                  placeholder="Capture a thought…"
+                  value={capture}
+                  onChange={(e) => setCapture(e.target.value)}
+                  onKeyDown={onCaptureKeyDown}
+                />
               </div>
             </div>
           </div>
 
-          <div className="card">
-            <div className="card-head">
-              <div className="card-title">To-Do List</div>
-              <span className="tag plain"><span className="num">{doneCount}/{tasks.length}</span></span>
+          {/* ===== CENTER ===== */}
+          <div className="col">
+            <div className="clockblock">
+              <div className="bigclock">{clockStr}<span className="sec">:{secStr}</span></div>
+              <div className="bigdate">{dateStr}</div>
             </div>
-            <div className="todo-prog">
-              <div className="bar"><i style={{ width: `${progressPct}%` }} /></div>
+
+            <div className="card">
+              <div className="card-head">
+                <div className="card-title">Habit Tracker</div>
+                <span className="tag plain">This week</span>
+              </div>
+              <div className="habit-head">
+                <span className="h">Habit</span>
+                <span className="d">M</span><span className="d">T</span><span className="d">W</span>
+                <span className="d">T</span><span className="d">F</span><span className="d">S</span><span className="d">S</span>
+                <span className="s">Strk</span>
+              </div>
+              <div>
+                {habits.map((hb, hi) => (
+                  <div className="habit-row" key={hi}>
+                    <span className="hn">{hb.name}</span>
+                    {hb.days.map((v, di) => (
+                      <span
+                        key={di}
+                        className={"hcell" + (v === 1 ? " on" : v === -1 ? " future" : "")}
+                        onClick={() => v !== -1 && toggleHabit(hi, di)}
+                      />
+                    ))}
+                    <span className="strk">{hb.strk}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="todo-list">
-              {tasks.map((t, i) => (
-                <div
-                  key={i}
-                  className={"todo-item" + (t.done ? " done" : "")}
-                  onClick={() => toggleTask(i)}
-                >
-                  <span className="check"><CheckIcon /></span>
-                  <span className="name">{t.name}</span>
-                  <span className="time">{t.time}</span>
+
+            <div className="card">
+              <div className="cal-head">
+                <div className="m">June 2026</div>
+                <div className="cal-nav">
+                  <button aria-label="Previous">‹</button>
+                  <button aria-label="Next">›</button>
                 </div>
-              ))}
+              </div>
+              <div className="cal-grid">
+                {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((w) => (
+                  <div className="wd" key={w}>{w.toUpperCase()}</div>
+                ))}
+                {calCells.map((c, i) => (
+                  <div
+                    key={i}
+                    className={"cal-day" + (c.muted ? " muted" : "") + (c.today ? " today" : "")}
+                  >
+                    {c.label}
+                    {c.event && <span className="dot" />}
+                  </div>
+                ))}
+              </div>
             </div>
-            {adding ? (
-              <input
-                ref={addInputRef}
-                className="add-input"
-                placeholder="Task name, then Enter…"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") finishAdd(true);
-                  if (e.key === "Escape") finishAdd(false);
-                }}
-                onBlur={() => finishAdd(true)}
-              />
-            ) : (
-              <button className="add-task" onClick={() => setAdding(true)}>
+          </div>
+
+          {/* ===== RIGHT ===== */}
+          <div className="col">
+            <div className="card">
+              <div className="card-head">
+                <div className="card-title">Nutrition</div>
+                <span className="tag">Today</span>
+              </div>
+              <div className="nutri-top">
+                <div className="ring">
+                  <svg width="88" height="88">
+                    <circle cx="44" cy="44" r="39" fill="none" stroke="var(--sage-track)" strokeWidth="7" />
+                    <circle
+                      cx="44" cy="44" r="39" fill="none" stroke="var(--sage)" strokeWidth="7"
+                      strokeLinecap="round" strokeDasharray="245" strokeDashoffset="68.6"
+                    />
+                  </svg>
+                  <div className="ring-c"><b className="num">72</b></div>
+                </div>
+                <div className="nutri-cal">
+                  <div className="big num">1,584</div>
+                  <div className="lbl"><b>/ 2,200</b> kcal consumed</div>
+                </div>
+              </div>
+              <div className="macros">
+                <div>
+                  <div className="mline"><span className="mn">Protein</span><span className="mv num">98 / 130g</span></div>
+                  <div className="mbar"><i style={{ width: "75%", background: "var(--sage)" }} /></div>
+                </div>
+                <div>
+                  <div className="mline"><span className="mn">Carbs</span><span className="mv num">176 / 240g</span></div>
+                  <div className="mbar"><i style={{ width: "73%", background: "var(--rose)" }} /></div>
+                </div>
+                <div>
+                  <div className="mline"><span className="mn">Fat</span><span className="mv num">52 / 70g</span></div>
+                  <div className="mbar"><i style={{ width: "74%", background: "var(--sage-soft)" }} /></div>
+                </div>
+              </div>
+              <div className="water">
+                <div className="wtop"><span className="wn">Water</span><span className="wv num">6/8 glasses</span></div>
+                <div className="glasses">
+                  {Array.from({ length: 8 }, (_, i) => (
+                    <div key={i} className={"glass" + (i < 6 ? " full" : "")} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-head">
+                <div className="card-title">Pomodoro</div>
+                <span className="tag rose"><span className="num">3</span> Done</span>
+              </div>
+              <div className="pomo">
+                <div className="pomo-ring">
+                  <svg width="178" height="178">
+                    <circle cx="89" cy="89" r="82" fill="none" stroke="oklch(var(--tint) / 0.08)" strokeWidth="2.5" />
+                    <circle
+                      cx="89" cy="89" r="82" fill="none" stroke="var(--sage)" strokeWidth="2.5"
+                      strokeLinecap="round" strokeDasharray={CIRC} strokeDashoffset={pomoOffset}
+                    />
+                  </svg>
+                  <div className="pomo-c">
+                    <div>
+                      <div className="mode">Focus</div>
+                      <div className="ptime num">{pomoTime}</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="pomo-ctrl">
+                  <button className="pbtn-main" onClick={() => setRunning((r) => !r)}>
+                    {running ? <PauseIcon /> : <PlayIcon />}
+                    {running ? "Pause" : "Start"}
+                  </button>
+                  <button className="pbtn-reset" aria-label="Reset" onClick={resetPomo}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 4v6h6" />
+                      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="pomo-dots">
+                  <i className="done" /><i className="done" /><i className="done" /><i />
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-head">
+                <div className="card-title">Activity</div>
+                <span className="tag plain"><b style={{ color: "var(--ink-2)", fontWeight: 600 }} className="num">428</b> this quarter</span>
+              </div>
+              <div className="heat">
+                {(heat ?? Array.from({ length: 15 * 7 }, () => 0)).map((lvl, i) => (
+                  <div key={i} className="hc" style={{ background: SHADES[lvl] }} />
+                ))}
+              </div>
+              <div className="heat-legend">
+                <span>15 Weeks</span>
+                <div className="scale">
+                  <span>Less</span>
+                  {SHADES.map((s, i) => (
+                    <i key={i} style={{ background: s }} />
+                  ))}
+                  <span>More</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ===== TASKS SCREEN ===== */
+        <div className="tasks-screen">
+          <div className="tasks-header">
+            <div>
+              <h1 className="tasks-title">All Tasks</h1>
+              <p className="tasks-sub">{tasks.length} tasks · {tasks.filter(t => t.starred).length} pinned to To-Do</p>
+            </div>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              {microsoftConnected && (
+                <span className={"ms-sync-btn" + (syncStatus === "success" ? " success" : syncStatus === "error" ? " error" : "")}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13" className={syncing ? "spin" : ""}>
+                    <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                    <path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                  </svg>
+                  {syncing ? "Syncing…" : syncStatus === "success" ? "Synced!" : syncStatus === "error" ? "Sync failed" : "Auto-sync on"}
+                </span>
+              )}
+              <button className="add-task tasks-add-btn" onClick={() => setTasksAdding(true)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
-                Add task
+                New task
               </button>
-            )}
-          </div>
-        </div>
-
-        {/* ===== CENTER ===== */}
-        <div className="col">
-          <div className="clockblock">
-            <div className="bigclock">{clockStr}<span className="sec">:{secStr}</span></div>
-            <div className="bigdate">{dateStr}</div>
-          </div>
-
-          <div className="card">
-            <div className="card-head">
-              <div className="card-title" style={{ display: "none" }} />
-              <span className="tag rose">Quick Note</span>
-            </div>
-            <p className="note-body">{note}</p>
-            <div className="note-divider" />
-            <div className="capture">
-              <input
-                type="text"
-                placeholder="Capture a thought…"
-                value={capture}
-                onChange={(e) => setCapture(e.target.value)}
-                onKeyDown={onCaptureKeyDown}
-              />
             </div>
           </div>
 
-          <div className="card">
-            <div className="card-head">
-              <div className="card-title">Habit Tracker</div>
-              <span className="tag plain">This week</span>
-            </div>
-            <div className="habit-head">
-              <span className="h">Habit</span>
-              <span className="d">M</span><span className="d">T</span><span className="d">W</span>
-              <span className="d">T</span><span className="d">F</span><span className="d">S</span><span className="d">S</span>
-              <span className="s">Strk</span>
-            </div>
-            <div>
-              {habits.map((hb, hi) => (
-                <div className="habit-row" key={hi}>
-                  <span className="hn">{hb.name}</span>
-                  {hb.days.map((v, di) => (
-                    <span
-                      key={di}
-                      className={"hcell" + (v === 1 ? " on" : v === -1 ? " future" : "")}
-                      onClick={() => v !== -1 && toggleHabit(hi, di)}
-                    />
-                  ))}
-                  <span className="strk">{hb.strk}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="cal-head">
-              <div className="m">June 2026</div>
-              <div className="cal-nav">
-                <button aria-label="Previous">‹</button>
-                <button aria-label="Next">›</button>
-              </div>
-            </div>
-            <div className="cal-grid">
-              {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((w) => (
-                <div className="wd" key={w}>{w.toUpperCase()}</div>
-              ))}
-              {calCells.map((c, i) => (
-                <div
-                  key={i}
-                  className={"cal-day" + (c.muted ? " muted" : "") + (c.today ? " today" : "")}
-                >
-                  {c.label}
-                  {c.event && <span className="dot" />}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ===== RIGHT ===== */}
-        <div className="col">
-          <div className="card">
-            <div className="card-head">
-              <div className="card-title">Nutrition</div>
-              <span className="tag">Today</span>
-            </div>
-            <div className="nutri-top">
-              <div className="ring">
-                <svg width="88" height="88">
-                  <circle cx="44" cy="44" r="39" fill="none" stroke="var(--sage-track)" strokeWidth="7" />
-                  <circle
-                    cx="44" cy="44" r="39" fill="none" stroke="var(--sage)" strokeWidth="7"
-                    strokeLinecap="round" strokeDasharray="245" strokeDashoffset="68.6"
-                  />
-                </svg>
-                <div className="ring-c"><b className="num">72</b></div>
-              </div>
-              <div className="nutri-cal">
-                <div className="big num">1,584</div>
-                <div className="lbl"><b>/ 2,200</b> kcal consumed</div>
-              </div>
-            </div>
-            <div className="macros">
-              <div>
-                <div className="mline"><span className="mn">Protein</span><span className="mv num">98 / 130g</span></div>
-                <div className="mbar"><i style={{ width: "75%", background: "var(--sage)" }} /></div>
-              </div>
-              <div>
-                <div className="mline"><span className="mn">Carbs</span><span className="mv num">176 / 240g</span></div>
-                <div className="mbar"><i style={{ width: "73%", background: "var(--rose)" }} /></div>
-              </div>
-              <div>
-                <div className="mline"><span className="mn">Fat</span><span className="mv num">52 / 70g</span></div>
-                <div className="mbar"><i style={{ width: "74%", background: "var(--sage-soft)" }} /></div>
-              </div>
-            </div>
-            <div className="water">
-              <div className="wtop"><span className="wn">Water</span><span className="wv num">6/8 glasses</span></div>
-              <div className="glasses">
-                {Array.from({ length: 8 }, (_, i) => (
-                  <div key={i} className={"glass" + (i < 6 ? " full" : "")} />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-head">
-              <div className="card-title">Pomodoro</div>
-              <span className="tag rose"><span className="num">3</span> Done</span>
-            </div>
-            <div className="pomo">
-              <div className="pomo-ring">
-                <svg width="178" height="178">
-                  <circle cx="89" cy="89" r="82" fill="none" stroke="oklch(var(--tint) / 0.08)" strokeWidth="2.5" />
-                  <circle
-                    cx="89" cy="89" r="82" fill="none" stroke="var(--sage)" strokeWidth="2.5"
-                    strokeLinecap="round" strokeDasharray={CIRC} strokeDashoffset={pomoOffset}
-                  />
-                </svg>
-                <div className="pomo-c">
-                  <div>
-                    <div className="mode">Focus</div>
-                    <div className="ptime num">{pomoTime}</div>
-                  </div>
-                </div>
-              </div>
-              <div className="pomo-ctrl">
-                <button className="pbtn-main" onClick={() => setRunning((r) => !r)}>
-                  {running ? <PauseIcon /> : <PlayIcon />}
-                  {running ? "Pause" : "Start"}
-                </button>
-                <button className="pbtn-reset" aria-label="Reset" onClick={resetPomo}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 4v6h6" />
-                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                  </svg>
+          {(() => {
+            const pinned = tasks.map((t, i) => ({ t, i })).filter(({ t }) => t.starred);
+            const other = tasks.map((t, i) => ({ t, i })).filter(({ t }) => !t.starred);
+            const renderRow = ({ t, i }: { t: Task; i: number }, isPinned: boolean) => (
+              <div key={i} className={"tasks-row" + (t.done ? " done" : "") + (isPinned ? " is-pinned" : "")}>
+                <span className="tasks-check" onClick={() => toggleTask(i)}>
+                  <span className="check">
+                    <CheckIcon />
+                  </span>
+                </span>
+                <span className="tasks-name">{t.name}</span>
+                <span className="tasks-time num">{t.time}</span>
+                {isPinned ? (
+                  <button
+                    className="tasks-pin tasks-unpin"
+                    onClick={() => toggleStar(i)}
+                    title="Unpin from To-Do list"
+                  >
+                    <PinOffIcon />
+                  </button>
+                ) : (
+                  <button
+                    className="tasks-pin"
+                    onClick={() => toggleStar(i)}
+                    title="Pin to To-Do list"
+                  >
+                    <PinIcon />
+                  </button>
+                )}
+                <button className="tasks-delete" onClick={() => deleteTask(i)} aria-label="Delete task">
+                  <TrashIcon />
                 </button>
               </div>
-              <div className="pomo-dots">
-                <i className="done" /><i className="done" /><i className="done" /><i />
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-head">
-              <div className="card-title">Activity</div>
-              <span className="tag plain"><b style={{ color: "var(--ink-2)", fontWeight: 600 }} className="num">428</b> this quarter</span>
-            </div>
-            <div className="heat">
-              {(heat ?? Array.from({ length: 15 * 7 }, () => 0)).map((lvl, i) => (
-                <div key={i} className="hc" style={{ background: SHADES[lvl] }} />
-              ))}
-            </div>
-            <div className="heat-legend">
-              <span>15 Weeks</span>
-              <div className="scale">
-                <span>Less</span>
-                {SHADES.map((s, i) => (
-                  <i key={i} style={{ background: s }} />
-                ))}
-                <span>More</span>
-              </div>
-            </div>
-          </div>
+            );
+            return (
+              <>
+                {pinned.length > 0 && (
+                  <>
+                    <p className="tasks-section-label">Pinned to To-Do</p>
+                    <div className="tasks-list-full">
+                      {pinned.map((item) => renderRow(item, true))}
+                    </div>
+                  </>
+                )}
+                {other.length > 0 && (
+                  <>
+                    <p className="tasks-section-label">Other</p>
+                    <div className="tasks-list-full">
+                      {tasksAdding && (
+                        <div className="tasks-row tasks-row-adding">
+                          <input
+                            ref={tasksAddInputRef}
+                            className="add-input"
+                            placeholder="Task name, then Enter…"
+                            value={tasksDraft}
+                            onChange={(e) => setTasksDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") finishTasksAdd(true);
+                              if (e.key === "Escape") finishTasksAdd(false);
+                            }}
+                            onBlur={() => finishTasksAdd(true)}
+                          />
+                        </div>
+                      )}
+                      {other.map((item) => renderRow(item, false))}
+                    </div>
+                  </>
+                )}
+                {other.length === 0 && tasksAdding && (
+                  <>
+                    <p className="tasks-section-label">Other</p>
+                    <div className="tasks-list-full">
+                      <div className="tasks-row tasks-row-adding">
+                        <input
+                          ref={tasksAddInputRef}
+                          className="add-input"
+                          placeholder="Task name, then Enter…"
+                          value={tasksDraft}
+                          onChange={(e) => setTasksDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") finishTasksAdd(true);
+                            if (e.key === "Escape") finishTasksAdd(false);
+                          }}
+                          onBlur={() => finishTasksAdd(true)}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
+            );
+          })()}
         </div>
-      </div>
+      )}
 
       {/* ===== RIGHT RAIL ===== */}
       <nav className="rail">

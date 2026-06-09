@@ -12,5 +12,11 @@ export default async function Home() {
     redirect("/login");
   }
 
-  return <Dashboard email={user.email ?? ""} />;
+  const { data: tokenRow } = await supabase
+    .from("microsoft_tokens")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .single();
+
+  return <Dashboard email={user.email ?? ""} microsoftConnected={!!tokenRow} />;
 }
