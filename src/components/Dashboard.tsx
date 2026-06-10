@@ -4,6 +4,13 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { signOut } from "@/app/auth/actions";
 import { syncTasksToMicrosoft } from "@/lib/microsoft/syncTasks";
 import { fetchMicrosoftTasks } from "@/lib/microsoft/fetchTasks";
+import {
+  addHabit as addHabitAction,
+  deleteHabit as deleteHabitAction,
+  updateHabitFrequency as updateHabitFrequencyAction,
+  toggleHabitToday as toggleHabitTodayAction,
+  type HabitRow,
+} from "@/lib/data/habits";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -27,15 +34,10 @@ const INITIAL_TASKS: Task[] = [
 ];
 
 /* ---------- habits ---------- */
-// 1 = done, 0 = missed, -1 = future
-type Habit = { name: string; days: number[]; strk: number };
-const INITIAL_HABITS: Habit[] = [
-  { name: "Meditate", days: [1, 1, 0, 1, 1, -1, -1], strk: 4 },
-  { name: "Read", days: [1, 1, 1, 0, 1, -1, -1], strk: 3 },
-  { name: "Workout", days: [0, 1, 0, 1, 1, -1, -1], strk: 1 },
-  { name: "Hydrate", days: [1, 1, 1, 1, 1, -1, -1], strk: 6 },
-  { name: "No sugar", days: [0, 0, 0, 0, 0, -1, -1], strk: 0 },
-];
+// frequency: days of week (0=Sun..6=Sat) the habit is scheduled on; empty = every day
+type Habit = HabitRow;
+
+const DAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
 
 /* ---------- calendar ---------- */
 const FIRST_DAY = 1;
@@ -107,9 +109,17 @@ function TrashIcon() {
   );
 }
 
-export default function Dashboard({ email, microsoftConnected }: { email: string; microsoftConnected: boolean }) {
+export default function Dashboard({
+  email,
+  microsoftConnected,
+  initialHabits,
+}: {
+  email: string;
+  microsoftConnected: boolean;
+  initialHabits: Habit[];
+}) {
   /* ---------- screen ---------- */
-  const [screen, setScreen] = useState<"home" | "tasks">("home");
+  const [screen, setScreen] = useState<"home" | "tasks" | "habits">("home");
 
   /* ---------- microsoft sync ---------- */
   const [syncing, startSync] = useTransition();
@@ -117,6 +127,17 @@ export default function Dashboard({ email, microsoftConnected }: { email: string
   const isFirstRender = useRef(true);
 
   /* ---------- clock ---------- */
+  /* ---------- dark mode ---------- */
+  const [darkMode, setDarkMode] = useState(false);
+  useEffect(() => {
+    const stored = localStorage.getItem("darkMode");
+    if (stored === "true") setDarkMode(true);
+  }, []);
+  useEffect(() => {
+    document.documentElement.setAttribute("data-mood", darkMode ? "Charcoal" : "");
+    localStorage.setItem("darkMode", String(darkMode));
+  }, [darkMode]);
+
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
@@ -234,15 +255,57 @@ export default function Dashboard({ email, microsoftConnected }: { email: string
   }
 
   /* ---------- habits ---------- */
-  const [habits, setHabits] = useState<Habit[]>(INITIAL_HABITS);
-  function toggleHabit(hi: number, di: number) {
+  const [habits, setHabits] = useState<Habit[]>(initialHabits);
+  function toggleHabit(id: string) {
+    const h = habits.find((h) => h.id === id);
+    if (!h) return;
+    const nowDone = !h.done;
     setHabits((prev) =>
-      prev.map((h, i) =>
-        i !== hi
-          ? h
-          : { ...h, days: h.days.map((v, j) => (j === di ? (v ? 0 : 1) : v)) }
-      )
+      prev.map((x) => (x.id === id ? { ...x, done: nowDone, strk: x.strk + (nowDone ? 1 : -1) } : x))
     );
+    toggleHabitTodayAction(id, h.done, h.strk);
+  }
+  function deleteHabit(id: string) {
+    setHabits((prev) => prev.filter((h) => h.id !== id));
+    deleteHabitAction(id);
+  }
+  function toggleHabitFreqDay(id: string, day: number) {
+    const h = habits.find((h) => h.id === id);
+    if (!h) return;
+    const has = h.frequency.includes(day);
+    const newFreq = has ? h.frequency.filter((d) => d !== day) : [...h.frequency, day].sort();
+    setHabits((prev) => prev.map((x) => (x.id === id ? { ...x, frequency: newFreq } : x)));
+    updateHabitFrequencyAction(id, newFreq);
+  }
+
+  const todayDow = now ? now.getDay() : 0;
+  const habitsToday = habits.filter((h) => h.frequency.length === 0 || h.frequency.includes(todayDow));
+  const habitsDone = habitsToday.filter((h) => h.done).length;
+  const habitsPct = habitsToday.length ? Math.round((habitsDone / habitsToday.length) * 100) : 0;
+
+  /* ---------- habits screen: add habit ---------- */
+  const [habitAdding, setHabitAdding] = useState(false);
+  const [habitDraft, setHabitDraft] = useState("");
+  const [habitDraftFreq, setHabitDraftFreq] = useState<number[]>([]);
+  const habitAddInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (habitAdding) habitAddInputRef.current?.focus();
+  }, [habitAdding]);
+
+  function toggleDraftFreqDay(day: number) {
+    setHabitDraftFreq((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort()));
+  }
+
+  async function finishHabitAdd(commit: boolean) {
+    const trimmed = habitDraft.trim();
+    if (commit && trimmed) {
+      const created = await addHabitAction(trimmed, habitDraftFreq);
+      setHabits((prev) => [...prev, created]);
+    }
+    setHabitAdding(false);
+    setHabitDraft("");
+    setHabitDraftFreq([]);
   }
 
   /* ---------- calendar ---------- */
@@ -319,8 +382,34 @@ export default function Dashboard({ email, microsoftConnected }: { email: string
           >
             Tasks
           </button>
+          <span className="screen-nav-sep">|</span>
+          <button
+            className={"screen-nav-btn" + (screen === "habits" ? " active" : "")}
+            onClick={() => setScreen("habits")}
+          >
+            Habits
+          </button>
         </nav>
-        <div className="topclock num">{now ? `${clockStr}:${secStr}` : "--:--:--"}</div>
+        <div style={{ justifySelf: "end", display: "flex", alignItems: "center", gap: "16px" }}>
+          <button
+            className="dark-toggle"
+            onClick={() => setDarkMode((d) => !d)}
+            aria-label="Toggle dark mode"
+            title="Toggle dark mode"
+          >
+            {darkMode ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            )}
+          </button>
+          <div className="topclock num">{now ? `${clockStr}:${secStr}` : "--:--:--"}</div>
+        </div>
       </header>
 
       {screen === "home" ? (
@@ -420,31 +509,47 @@ export default function Dashboard({ email, microsoftConnected }: { email: string
               <div className="bigdate">{dateStr}</div>
             </div>
 
-            <div className="card">
+            <div className="card habits-card">
               <div className="card-head">
-                <div className="card-title">Habit Tracker</div>
-                <span className="tag plain">This week</span>
+                <div className="card-title">01 // Habits</div>
+                <span className="tag plain">{habitsDone}/{habitsToday.length} · {habitsPct}%</span>
               </div>
-              <div className="habit-head">
-                <span className="h">Habit</span>
-                <span className="d">M</span><span className="d">T</span><span className="d">W</span>
-                <span className="d">T</span><span className="d">F</span><span className="d">S</span><span className="d">S</span>
-                <span className="s">Strk</span>
-              </div>
-              <div>
-                {habits.map((hb, hi) => (
-                  <div className="habit-row" key={hi}>
-                    <span className="hn">{hb.name}</span>
-                    {hb.days.map((v, di) => (
-                      <span
-                        key={di}
-                        className={"hcell" + (v === 1 ? " on" : v === -1 ? " future" : "")}
-                        onClick={() => v !== -1 && toggleHabit(hi, di)}
-                      />
-                    ))}
-                    <span className="strk">{hb.strk}</span>
+
+              <div className="habits-score">
+                <div className="habits-score-badge">{habitsDone}</div>
+                <div className="habits-score-mid">
+                  <div className="habits-score-label">Daily score · resets 00:00</div>
+                  <div className="habits-score-msg">
+                    {habitsDone === 0 ? "Start with one." : `${habitsDone} done — keep going.`}
                   </div>
-                ))}
+                </div>
+                <div className="habits-score-bar">
+                  <i style={{ width: `${habitsPct}%` }} />
+                </div>
+              </div>
+
+              <div className="habits-grid">
+                {habits.map((hb) => {
+                  if (!(hb.frequency.length === 0 || hb.frequency.includes(todayDow))) return null;
+                  return (
+                    <div
+                      key={hb.id}
+                      className={"habit-card" + (hb.done ? " done" : "")}
+                      onClick={() => toggleHabit(hb.id)}
+                    >
+                      <span className="habit-check" />
+                      <div className="habit-info">
+                        <div className="habit-name">{hb.name}</div>
+                      </div>
+                      <div className="habit-strk">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                        </svg>
+                        {hb.strk}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -582,7 +687,7 @@ export default function Dashboard({ email, microsoftConnected }: { email: string
             </div>
           </div>
         </div>
-      ) : (
+      ) : screen === "tasks" ? (
         /* ===== TASKS SCREEN ===== */
         <div className="tasks-screen">
           <div className="tasks-header">
@@ -701,6 +806,90 @@ export default function Dashboard({ email, microsoftConnected }: { email: string
               </>
             );
           })()}
+        </div>
+      ) : null}
+
+      {screen === "habits" && (
+        /* ===== HABITS SCREEN ===== */
+        <div className="tasks-screen">
+          <div className="tasks-header">
+            <div>
+              <h1 className="tasks-title">All Habits</h1>
+              <p className="tasks-sub">{habits.length} habits · {habitsToday.length} scheduled today</p>
+            </div>
+            <button className="add-task tasks-add-btn" onClick={() => setHabitAdding(true)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              New habit
+            </button>
+          </div>
+
+          <div className="tasks-list-full">
+            {habitAdding && (
+              <div className="habit-row habit-row-adding">
+                <input
+                  ref={habitAddInputRef}
+                  className="add-input"
+                  placeholder="Habit name, then Enter…"
+                  value={habitDraft}
+                  onChange={(e) => setHabitDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") finishHabitAdd(true);
+                    if (e.key === "Escape") finishHabitAdd(false);
+                  }}
+                />
+                <div className="freq-picker">
+                  {DAY_LETTERS.map((l, d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      className={"freq-day" + (habitDraftFreq.includes(d) ? " active" : "")}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => toggleDraftFreqDay(d)}
+                    >
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                <button className="add-task" style={{ width: "auto" }} onMouseDown={(e) => e.preventDefault()} onClick={() => finishHabitAdd(true)}>
+                  Add
+                </button>
+                <button className="habit-cancel" onMouseDown={(e) => e.preventDefault()} onClick={() => finishHabitAdd(false)}>
+                  Cancel
+                </button>
+              </div>
+            )}
+            {habits.map((hb) => (
+              <div key={hb.id} className="habit-row">
+                <div className="habit-row-info">
+                  <div className="tasks-name">{hb.name}</div>
+                </div>
+                <div className="freq-picker">
+                  {DAY_LETTERS.map((l, d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      className={"freq-day" + (hb.frequency.includes(d) ? " active" : "")}
+                      onClick={() => toggleHabitFreqDay(hb.id, d)}
+                      title={hb.frequency.length === 0 ? "Every day (toggle a day to restrict)" : undefined}
+                    >
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                <div className="habit-strk">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                  </svg>
+                  {hb.strk}
+                </div>
+                <button className="tasks-delete" onClick={() => deleteHabit(hb.id)} aria-label="Delete habit">
+                  <TrashIcon />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

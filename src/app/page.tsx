@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Dashboard from "@/components/Dashboard";
+import { getHabits } from "@/lib/data/habits";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -18,5 +19,7 @@ export default async function Home() {
     .eq("user_id", user.id)
     .single();
 
-  return <Dashboard email={user.email ?? ""} microsoftConnected={!!tokenRow} />;
+  const habits = await getHabits();
+
+  return <Dashboard email={user.email ?? ""} microsoftConnected={!!tokenRow} initialHabits={habits} />;
 }
