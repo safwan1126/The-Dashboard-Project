@@ -138,6 +138,17 @@ export default function Dashboard({
     localStorage.setItem("darkMode", String(darkMode));
   }, [darkMode]);
 
+  /* ---------- glass mode ---------- */
+  const [glass, setGlass] = useState(false);
+  useEffect(() => {
+    const stored = localStorage.getItem("glass");
+    if (stored === "true") setGlass(true);
+  }, []);
+  useEffect(() => {
+    document.documentElement.setAttribute("data-glass", glass ? "on" : "");
+    localStorage.setItem("glass", String(glass));
+  }, [glass]);
+
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
@@ -391,6 +402,17 @@ export default function Dashboard({
           </button>
         </nav>
         <div style={{ justifySelf: "end", display: "flex", alignItems: "center", gap: "16px" }}>
+          <button
+            className={"dark-toggle" + (glass ? " active" : "")}
+            onClick={() => setGlass((g) => !g)}
+            aria-label="Toggle glass mode"
+            title={glass ? "Glass mode on" : "Glass mode off"}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="3" />
+              <path d="M3 9h18M9 21V9" />
+            </svg>
+          </button>
           <button
             className="dark-toggle"
             onClick={() => setDarkMode((d) => !d)}

@@ -57,7 +57,49 @@ html[data-mood="Charcoal"] {
   --ink-4:  oklch(0.42 0.003 264);
   --tint:   0.97 0.002 264;
   --shadow: 0 22px 52px -28px oklch(0 0 0 / 0.8), 0 2px 8px -3px oklch(0 0 0 / 0.6);
+
+  --sage:        oklch(0.74 0.135 250);
+  --sage-deep:   oklch(0.82 0.120 250);
+  --sage-soft:   oklch(0.40 0.055 250);
+  --sage-faint:  oklch(0.30 0.035 250);
+  --sage-track:  oklch(0.32 0.030 250);
 }
+
+/* ============ GLASSMORPHISM (data-glass="on") ============ */
+/* Shared: fixed backdrop so the blur reads, translucent blurred cards */
+html[data-glass="on"] { background: var(--paper); }
+html[data-glass="on"] body { background: transparent; }
+html[data-glass="on"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+html[data-glass="on"] .card {
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+}
+
+/* Glass · dark (blue) */
+html[data-glass="on"][data-mood="Charcoal"] { --card: oklch(0.30 0.016 264 / 0.42); }
+html[data-glass="on"][data-mood="Charcoal"] body::before {
+  background:
+    radial-gradient(at 18% 12%, oklch(0.42 0.12 268 / 0.40), transparent 46%),
+    radial-gradient(at 82% 8%, oklch(0.40 0.11 196 / 0.32), transparent 48%),
+    radial-gradient(at 65% 92%, oklch(0.38 0.12 318 / 0.30), transparent 50%);
+}
+html[data-glass="on"][data-mood="Charcoal"] .card { border: 1px solid oklch(1 0 0 / 0.10); }
+
+/* Glass · light (sage green) */
+html[data-glass="on"]:not([data-mood="Charcoal"]) { --card: oklch(1 0 0 / 0.55); }
+html[data-glass="on"]:not([data-mood="Charcoal"]) body::before {
+  background:
+    radial-gradient(at 18% 12%, oklch(0.88 0.060 132 / 0.55), transparent 46%),
+    radial-gradient(at 82% 8%, oklch(0.90 0.050 120 / 0.45), transparent 48%),
+    radial-gradient(at 65% 92%, oklch(0.89 0.055 145 / 0.42), transparent 50%);
+}
+html[data-glass="on"]:not([data-mood="Charcoal"]) .card { border: 1px solid oklch(1 0 0 / 0.55); }
 
 /* ============ TWEAK · ACCENT ============ */
 html[data-accent="Indigo"] {
@@ -123,6 +165,7 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
   display: grid; place-items: center; transition: background .15s, color .15s;
 }
 .dark-toggle:hover { background: oklch(var(--tint) / 0.05); color: var(--ink); }
+.dark-toggle.active { background: var(--sage-faint); border-color: var(--sage-soft); color: var(--sage-deep); }
 .dark-toggle svg { width: 15px; height: 15px; }
 
 /* ============ GRID ============ */
