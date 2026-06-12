@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { signOut } from "@/app/auth/actions";
 import { syncTasksToMicrosoft } from "@/lib/microsoft/syncTasks";
 import { fetchMicrosoftTasks } from "@/lib/microsoft/fetchTasks";
+import { fetchDayEvents, type CalendarEvent } from "@/lib/google/fetchEvents";
 import {
   addHabit as addHabitAction,
   deleteHabit as deleteHabitAction,
@@ -38,12 +39,6 @@ const INITIAL_TASKS: Task[] = [
 type Habit = HabitRow;
 
 const DAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
-
-/* ---------- calendar ---------- */
-const FIRST_DAY = 1;
-const TOTAL_DAYS = 30;
-const TODAY = 7;
-const EVENTS = new Set([5, 14, 18, 22]);
 
 /* ---------- heatmap ---------- */
 const SHADES = [
@@ -112,10 +107,12 @@ function TrashIcon() {
 export default function Dashboard({
   email,
   microsoftConnected,
+  googleConnected,
   initialHabits,
 }: {
   email: string;
   microsoftConnected: boolean;
+  googleConnected: boolean;
   initialHabits: Habit[];
 }) {
   /* ---------- screen ---------- */
@@ -319,14 +316,106 @@ export default function Dashboard({
     setHabitDraftFreq([]);
   }
 
-  /* ---------- calendar ---------- */
-  const calCells: { label: number; muted: boolean; today: boolean; event: boolean }[] = [];
-  for (let p = 0; p < FIRST_DAY; p++) {
-    calCells.push({ label: 31 - FIRST_DAY + 1 + p, muted: true, today: false, event: false });
+  /* ---------- calendar (Google, day view) ---------- */
+  const [calDate, setCalDate] = useState(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+  const [calEvents, setCalEvents] = useState<CalendarEvent[] | null>(null);
+  const [calState, setCalState] = useState<"loading" | "ok" | "disconnected">(
+    googleConnected ? "loading" : "disconnected"
+  );
+  const calCache = useRef(new Map<string, CalendarEvent[]>());
+  const calFetching = useRef(new Set<string>());
+
+  function isoOf(d: Date) {
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
-  for (let d = 1; d <= TOTAL_DAYS; d++) {
-    calCells.push({ label: d, muted: false, today: d === TODAY, event: EVENTS.has(d) });
+  function isoShift(iso: string, delta: number) {
+    const d = new Date(`${iso}T00:00:00`);
+    d.setDate(d.getDate() + delta);
+    return isoOf(d);
   }
+  const calDateISO = isoOf(calDate);
+
+  // Fetch a day into the cache (deduped); returns the events or null if disconnected
+  async function loadDay(iso: string): Promise<CalendarEvent[] | null> {
+    if (calFetching.current.has(iso)) return calCache.current.get(iso) ?? null;
+    calFetching.current.add(iso);
+    try {
+      const result = await fetchDayEvents(iso);
+      if (result.status === "disconnected") {
+        setCalState("disconnected");
+        return null;
+      }
+      calCache.current.set(iso, result.events);
+      return result.events;
+    } finally {
+      calFetching.current.delete(iso);
+    }
+  }
+
+  useEffect(() => {
+    if (!googleConnected) return;
+    let stale = false;
+
+    const cached = calCache.current.get(calDateISO);
+    if (cached) {
+      // Instant render from cache, then refresh quietly in the background
+      setCalEvents(cached);
+      setCalState("ok");
+      loadDay(calDateISO).then((events) => {
+        if (!stale && events) setCalEvents(events);
+      });
+    } else {
+      setCalState("loading");
+      loadDay(calDateISO).then((events) => {
+        if (stale || !events) return;
+        setCalEvents(events);
+        setCalState("ok");
+      });
+    }
+
+    // Prefetch the whole visible week, the neighbours, and today,
+    // so the week strip, ‹ ›, and "Today" all feel instant
+    const mondayOffset = -((calDate.getDay() + 6) % 7);
+    const prefetch = new Set<string>([isoShift(calDateISO, -1), isoShift(calDateISO, 1), isoOf(new Date())]);
+    for (let i = 0; i < 7; i++) prefetch.add(isoShift(calDateISO, mondayOffset + i));
+    for (const iso of prefetch) {
+      if (iso !== calDateISO && !calCache.current.has(iso)) loadDay(iso);
+    }
+
+    return () => { stale = true; };
+  }, [googleConnected, calDateISO]);
+
+  function shiftCalDay(delta: number) {
+    setCalDate((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + delta);
+      return d;
+    });
+  }
+
+  // Week strip: the 7 days (Mon–Sun) of the selected day's week
+  const calWeek: Date[] = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(calDate);
+    d.setDate(d.getDate() - ((calDate.getDay() + 6) % 7) + i);
+    return d;
+  });
+  const WEEK_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+
+  const calIsToday = now ? calDate.toDateString() === now.toDateString() : true;
+  const calLabel = calIsToday
+    ? "Today"
+    : `${DAYS[calDate.getDay()].slice(0, 3)} ${calDate.getDate()} ${MONTHS[calDate.getMonth()].slice(0, 3)}`;
+
+  // Timeline window: 07:00–22:00, stretched if events fall outside it
+  const CAL_PX_PER_MIN = 56 / 60;
+  const timedEvents = (calEvents ?? []).filter((e) => !e.allDay);
+  const allDayEvents = (calEvents ?? []).filter((e) => e.allDay);
+  const calStartHour = Math.min(7, ...timedEvents.map((e) => Math.floor(e.startMin / 60)));
+  const calEndHour = Math.max(22, ...timedEvents.map((e) => Math.ceil(e.endMin / 60)));
 
   /* ---------- heatmap (client-only random to avoid hydration mismatch) ---------- */
   const [heat, setHeat] = useState<number[] | null>(null);
@@ -577,26 +666,99 @@ export default function Dashboard({
 
             <div className="card">
               <div className="cal-head">
-                <div className="m">June 2026</div>
+                <div className="m">{calLabel}</div>
                 <div className="cal-nav">
-                  <button aria-label="Previous">‹</button>
-                  <button aria-label="Next">›</button>
+                  {!calIsToday && (
+                    <button
+                      className="cal-today-btn"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setHours(0, 0, 0, 0);
+                        setCalDate(d);
+                      }}
+                    >
+                      Today
+                    </button>
+                  )}
+                  <button aria-label="Previous day" onClick={() => shiftCalDay(-1)}>‹</button>
+                  <button aria-label="Next day" onClick={() => shiftCalDay(1)}>›</button>
                 </div>
               </div>
-              <div className="cal-grid">
-                {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((w) => (
-                  <div className="wd" key={w}>{w.toUpperCase()}</div>
-                ))}
-                {calCells.map((c, i) => (
-                  <div
-                    key={i}
-                    className={"cal-day" + (c.muted ? " muted" : "") + (c.today ? " today" : "")}
-                  >
-                    {c.label}
-                    {c.event && <span className="dot" />}
+              {calState === "disconnected" ? (
+                <a href="/auth/google" className="ms-connect-btn" style={{ marginTop: 0 }}>
+                  <svg viewBox="0 0 24 24" width="14" height="14">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.43.34-2.1V7.06H2.18A11 11 0 0 0 1 12c0 1.78.43 3.45 1.18 4.94l3.66-2.84z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/>
+                  </svg>
+                  {googleConnected ? "Reconnect Google Calendar" : "Connect Google Calendar"}
+                </a>
+              ) : (
+                <>
+                  <div className="cal-week">
+                    {calWeek.map((d, i) => {
+                      const selected = d.toDateString() === calDate.toDateString();
+                      const isToday = now ? d.toDateString() === now.toDateString() : false;
+                      return (
+                        <button
+                          key={i}
+                          className={"cal-week-day" + (selected ? " selected" : "") + (isToday ? " is-today" : "")}
+                          onClick={() => {
+                            const next = new Date(d);
+                            next.setHours(0, 0, 0, 0);
+                            setCalDate(next);
+                          }}
+                        >
+                          <span className="cal-week-wd">{WEEK_LABELS[i]}</span>
+                          <span className="cal-week-num num">{pad(d.getDate())}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+                  {allDayEvents.length > 0 && (
+                    <div className="cal-allday">
+                      {allDayEvents.map((ev) => (
+                        <span key={ev.id} className="cal-allday-chip">{ev.title}</span>
+                      ))}
+                    </div>
+                  )}
+                  <div className={"cal-timeline" + (calState === "loading" ? " loading" : "")}>
+                    {Array.from({ length: calEndHour - calStartHour + 1 }, (_, i) => {
+                      const h = calStartHour + i;
+                      return (
+                        <div key={h} className="cal-hour" style={{ top: `${(h - calStartHour) * 60 * CAL_PX_PER_MIN}px` }}>
+                          <span className="cal-hour-label num">{pad(h)}:00</span>
+                          <span className="cal-hour-line" />
+                        </div>
+                      );
+                    })}
+                    {calIsToday && now && (() => {
+                      const nowMin = now.getHours() * 60 + now.getMinutes();
+                      if (nowMin < calStartHour * 60 || nowMin > calEndHour * 60) return null;
+                      return (
+                        <div className="cal-now" style={{ top: `${(nowMin - calStartHour * 60) * CAL_PX_PER_MIN}px` }}>
+                          <span className="cal-now-dot" />
+                        </div>
+                      );
+                    })()}
+                    {timedEvents.map((ev) => {
+                      const top = (ev.startMin - calStartHour * 60) * CAL_PX_PER_MIN;
+                      const height = Math.max((ev.endMin - ev.startMin) * CAL_PX_PER_MIN, 22);
+                      return (
+                        <div key={ev.id} className="cal-block" style={{ top: `${top}px`, height: `${height}px` }} title={`${ev.title} · ${ev.start} – ${ev.end}`}>
+                          <span className="cal-block-title">{ev.title}</span>
+                          {height > 34 && <span className="cal-block-time num">{ev.start} – {ev.end}</span>}
+                        </div>
+                      );
+                    })}
+                    <div style={{ height: `${(calEndHour - calStartHour) * 60 * CAL_PX_PER_MIN + 14}px` }} />
+                  </div>
+                  {calState === "ok" && timedEvents.length === 0 && allDayEvents.length === 0 && (
+                    <p className="cal-empty">No events — clear runway.</p>
+                  )}
+                </>
+              )}
             </div>
           </div>
 

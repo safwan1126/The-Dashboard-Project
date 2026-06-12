@@ -49,6 +49,7 @@ body, .card, .cal-day, .check, .bar > i, .hcell, .mbar > i, .glass, .pomo-dots i
 
 /* ============ TWEAK · MOOD ============ */
 html[data-mood="Charcoal"] {
+  color-scheme: dark;
   --paper:  oklch(0.135 0.002 264);
   --card:   oklch(0.185 0.003 264);
   --ink:    oklch(0.94 0.002 264);
@@ -375,6 +376,59 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .cal-day.today { background: var(--sage); color: var(--card); font-weight: 600; }
 .cal-day .dot { position: absolute; bottom: 6px; width: 4px; height: 4px; border-radius: 50%; background: var(--rose); }
 .cal-day.today .dot { background: var(--card); }
+
+.cal-empty { font-size: 13px; color: var(--ink-3); padding: 6px 2px 2px; }
+
+/* Day-view timeline */
+.cal-nav button.cal-today-btn {
+  width: auto; height: 28px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--line);
+  background: transparent; color: var(--ink-2); cursor: pointer;
+  font-family: var(--sans); font-size: 11.5px; font-weight: 600;
+  transition: background .15s, color .15s;
+}
+.cal-today-btn:hover { background: oklch(var(--tint) / 0.03); color: var(--ink); }
+.cal-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 14px; }
+.cal-week-day {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 0 7px; border-radius: 10px;
+  border: 1px solid transparent; background: transparent; cursor: pointer;
+  font-family: var(--sans);
+  transition: background .15s, border-color .15s;
+}
+.cal-week-day:hover { background: oklch(var(--tint) / 0.04); }
+.cal-week-day.selected { border-color: var(--line); background: oklch(var(--tint) / 0.05); }
+.cal-week-wd { font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-4); }
+.cal-week-num { font-size: 15px; color: var(--ink-2); }
+.cal-week-day.selected .cal-week-num { color: var(--ink); font-weight: 600; }
+.cal-week-day.is-today .cal-week-num { color: var(--sage-deep); font-weight: 600; }
+.cal-allday { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.cal-allday-chip {
+  padding: 4px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  color: var(--sage-deep); background: var(--sage-faint); border: 1px solid var(--sage-soft);
+}
+.cal-timeline {
+  position: relative; max-height: 320px; overflow-y: auto;
+  transition: opacity .2s;
+  scrollbar-width: thin;
+  scrollbar-color: oklch(var(--tint) / 0.2) transparent;
+}
+.cal-timeline.loading { opacity: 0.45; pointer-events: none; }
+.cal-hour { position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 8px; }
+.cal-hour-label { font-size: 10px; color: var(--ink-4); width: 34px; flex: 0 0 auto; transform: translateY(-50%); }
+.cal-hour-line { flex: 1; height: 1px; background: var(--line-2); transform: translateY(-50%); }
+.cal-now { position: absolute; left: 42px; right: 0; height: 2px; background: var(--rose); z-index: 2; }
+.cal-now-dot { position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--rose); }
+.cal-block {
+  position: absolute; left: 46px; right: 4px; z-index: 1;
+  padding: 4px 9px; border-radius: 7px; overflow: hidden;
+  background: var(--sage-faint); border: 1px solid var(--sage-soft);
+  border-left: 3px solid var(--sage);
+}
+.cal-block-title {
+  display: block; font-size: 12px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cal-block-time { display: block; font-size: 10.5px; color: var(--ink-3); }
 
 /* ============ NUTRITION ============ */
 .nutri-top { display: flex; align-items: center; gap: 20px; margin-bottom: 22px; }

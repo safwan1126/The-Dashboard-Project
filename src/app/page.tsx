@@ -19,7 +19,20 @@ export default async function Home() {
     .eq("user_id", user.id)
     .single();
 
+  const { data: googleTokenRow } = await supabase
+    .from("google_tokens")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .single();
+
   const habits = await getHabits();
 
-  return <Dashboard email={user.email ?? ""} microsoftConnected={!!tokenRow} initialHabits={habits} />;
+  return (
+    <Dashboard
+      email={user.email ?? ""}
+      microsoftConnected={!!tokenRow}
+      googleConnected={!!googleTokenRow}
+      initialHabits={habits}
+    />
+  );
 }
