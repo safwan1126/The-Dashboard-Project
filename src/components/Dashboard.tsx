@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { signOut } from "@/app/auth/actions";
 import { syncTasksToMicrosoft } from "@/lib/microsoft/syncTasks";
 import { fetchMicrosoftTasks } from "@/lib/microsoft/fetchTasks";
 import { fetchDayEvents, type CalendarEvent } from "@/lib/google/fetchEvents";
@@ -622,7 +621,7 @@ export default function Dashboard({
 
             <div className="card habits-card">
               <div className="card-head">
-                <div className="card-title">01 // Habits</div>
+                <div className="card-title">Habits</div>
                 <span className="tag plain">{habitsDone}/{habitsToday.length} · {habitsPct}%</span>
               </div>
 
@@ -1077,27 +1076,6 @@ export default function Dashboard({
         </div>
       )}
 
-      {/* ===== RIGHT RAIL ===== */}
-      <nav className="rail">
-        <button aria-label="Play"><PlayIcon /></button>
-        <button aria-label="Bookmark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-          </svg>
-        </button>
-        <button aria-label="Chat">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 11.5a8.38 8.38 0 0 1-9 8.36 8.5 8.5 0 0 1-3.8-.9L3 20l1-3.8A8.5 8.5 0 0 1 12 3a8.38 8.38 0 0 1 9 8.5z" />
-          </svg>
-        </button>
-        <button aria-label="Sign out" onClick={() => signOut()}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <path d="M16 17l5-5-5-5" />
-            <path d="M21 12H9" />
-          </svg>
-        </button>
-      </nav>
     </div>
   );
 }

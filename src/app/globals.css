@@ -489,7 +489,7 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .heat-legend .scale { display: flex; align-items: center; gap: 4px; }
 .heat-legend .scale i { width: 11px; height: 11px; border-radius: 3px; }
 
-/* ============ RIGHT RAIL ============ */
+/* ============ RIGHT RAIL (unused) ============ */
 .rail {
   position: fixed; right: 16px; top: 50%; transform: translateY(-50%);
   display: flex; flex-direction: column; gap: 18px;
