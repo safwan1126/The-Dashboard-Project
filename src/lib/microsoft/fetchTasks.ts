@@ -6,7 +6,7 @@ type MsTask = { id: string; title: string; status: string };
 
 const LIST_NAME = "NeeyazOS";
 
-export type RemoteTask = { name: string; done: boolean };
+export type RemoteTask = { id: string; name: string; done: boolean };
 
 export async function fetchMicrosoftTasks(): Promise<RemoteTask[]> {
   const accessToken = await getAccessToken();
@@ -28,6 +28,7 @@ export async function fetchMicrosoftTasks(): Promise<RemoteTask[]> {
   const tasksData = await tasksRes.json();
 
   return (tasksData.value ?? []).map((t: MsTask) => ({
+    id: t.id,
     name: t.title,
     done: t.status === "completed",
   }));

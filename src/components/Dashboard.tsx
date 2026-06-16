@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { syncTasksToMicrosoft } from "@/lib/microsoft/syncTasks";
+import { syncTasksToMicrosoft, deleteTaskFromMicrosoft } from "@/lib/microsoft/syncTasks";
 import { fetchMicrosoftTasks } from "@/lib/microsoft/fetchTasks";
 import { fetchDayEvents, type CalendarEvent } from "@/lib/google/fetchEvents";
 import {
@@ -23,7 +23,7 @@ const MONTHS = [
 ];
 
 /* ---------- task ---------- */
-type Task = { name: string; time: string; done: boolean; starred: boolean };
+type Task = { msId?: string; name: string; time: string; done: boolean; starred: boolean };
 
 /* ---------- habits ---------- */
 // frequency: days of week (0=Sun..6=Sat) the habit is scheduled on; empty = every day
@@ -176,7 +176,9 @@ export default function Dashboard({
   }
 
   function deleteTask(i: number) {
+    const task = tasks[i];
     setTasks((prev) => prev.filter((_, idx) => idx !== i));
+    if (microsoftConnected && task.msId) deleteTaskFromMicrosoft(task.msId);
   }
 
   function finishAdd(commit: boolean) {
@@ -204,6 +206,7 @@ export default function Dashboard({
     if (!microsoftConnected) return;
     fetchMicrosoftTasks().then((remoteTasks) => {
       setTasks(remoteTasks.map((rt) => ({
+        msId: rt.id,
         name: rt.name,
         time: "--:--",
         done: rt.done,
@@ -515,18 +518,6 @@ export default function Dashboard({
                   <span className="pill">Focused</span>
                   <span className="pill rose"><span className="num">12</span>-day streak</span>
                 </div>
-                <a
-                  href={microsoftConnected ? undefined : "/auth/microsoft"}
-                  className={"ms-connect-btn" + (microsoftConnected ? " connected" : "")}
-                >
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                    <rect x="1" y="1" width="10" height="10" fill="#f25022"/>
-                    <rect x="13" y="1" width="10" height="10" fill="#7fba00"/>
-                    <rect x="1" y="13" width="10" height="10" fill="#00a4ef"/>
-                    <rect x="13" y="13" width="10" height="10" fill="#ffb900"/>
-                  </svg>
-                  {microsoftConnected ? "Microsoft To Do connected" : "Connect Microsoft To Do"}
-                </a>
               </div>
             </div>
 
@@ -910,6 +901,15 @@ export default function Dashboard({
               <p className="tasks-sub">{tasks.length} tasks · {tasks.filter(t => t.starred).length} pinned to To-Do</p>
             </div>
             <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <span className="ms-connect-btn connected" style={{ marginTop: 0 }}>
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                  <rect x="1" y="1" width="10" height="10" fill="#f25022"/>
+                  <rect x="13" y="1" width="10" height="10" fill="#7fba00"/>
+                  <rect x="1" y="13" width="10" height="10" fill="#00a4ef"/>
+                  <rect x="13" y="13" width="10" height="10" fill="#ffb900"/>
+                </svg>
+                Microsoft To Do connected
+              </span>
               <span className={"ms-sync-btn" + (syncStatus === "success" ? " success" : syncStatus === "error" ? " error" : "")}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13" className={syncing ? "spin" : ""}>
                   <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" />

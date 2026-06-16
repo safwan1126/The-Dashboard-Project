@@ -28,6 +28,16 @@ async function getOrCreateList(accessToken: string): Promise<string> {
   return created.id;
 }
 
+export async function deleteTaskFromMicrosoft(taskId: string): Promise<void> {
+  const accessToken = await getAccessToken();
+  if (!accessToken) return;
+  const listId = await getOrCreateList(accessToken);
+  await fetch(`https://graph.microsoft.com/v1.0/me/todo/lists/${listId}/tasks/${taskId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
 export async function syncTasksToMicrosoft(tasks: Task[]): Promise<{ success: boolean; error?: string }> {
   const accessToken = await getAccessToken();
   if (!accessToken) return { success: false, error: "Not connected to Microsoft" };
