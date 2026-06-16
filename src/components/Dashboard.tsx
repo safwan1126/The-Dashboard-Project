@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { syncTasksToMicrosoft, deleteTaskFromMicrosoft } from "@/lib/microsoft/syncTasks";
 import { fetchMicrosoftTasks } from "@/lib/microsoft/fetchTasks";
 import { fetchDayEvents, type CalendarEvent } from "@/lib/google/fetchEvents";
@@ -107,7 +108,15 @@ export default function Dashboard({
   initialHabits: Habit[];
 }) {
   /* ---------- screen ---------- */
-  const [screen, setScreen] = useState<"home" | "tasks" | "habits">("home");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const screen = (searchParams.get("screen") ?? "home") as "home" | "tasks" | "habits";
+  function setScreen(s: "home" | "tasks" | "habits") {
+    const params = new URLSearchParams(searchParams.toString());
+    if (s === "home") params.delete("screen");
+    else params.set("screen", s);
+    router.push(`?${params.toString()}`);
+  }
 
   /* ---------- microsoft sync ---------- */
   const [syncing, startSync] = useTransition();

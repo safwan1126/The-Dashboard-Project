@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import Dashboard from "@/components/Dashboard";
 import { getHabits } from "@/lib/data/habits";
@@ -28,11 +29,13 @@ export default async function Home() {
   const habits = await getHabits();
 
   return (
-    <Dashboard
-      email={user.email ?? ""}
-      microsoftConnected={!!tokenRow}
-      googleConnected={!!googleTokenRow}
-      initialHabits={habits}
-    />
+    <Suspense>
+      <Dashboard
+        email={user.email ?? ""}
+        microsoftConnected={!!tokenRow}
+        googleConnected={!!googleTokenRow}
+        initialHabits={habits}
+      />
+    </Suspense>
   );
 }
