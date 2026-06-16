@@ -125,22 +125,18 @@ export default function Dashboard({
 
   /* ---------- clock ---------- */
   /* ---------- dark mode ---------- */
-  const [darkMode, setDarkMode] = useState(false);
-  useEffect(() => {
-    const stored = localStorage.getItem("darkMode");
-    if (stored === "true") setDarkMode(true);
-  }, []);
+  const [darkMode, setDarkMode] = useState(() =>
+    typeof window !== "undefined" && localStorage.getItem("darkMode") === "true"
+  );
   useEffect(() => {
     document.documentElement.setAttribute("data-mood", darkMode ? "Charcoal" : "");
     localStorage.setItem("darkMode", String(darkMode));
   }, [darkMode]);
 
   /* ---------- glass mode ---------- */
-  const [glass, setGlass] = useState(false);
-  useEffect(() => {
-    const stored = localStorage.getItem("glass");
-    if (stored === "true") setGlass(true);
-  }, []);
+  const [glass, setGlass] = useState(() =>
+    typeof window !== "undefined" && localStorage.getItem("glass") === "true"
+  );
   useEffect(() => {
     document.documentElement.setAttribute("data-glass", glass ? "on" : "");
     localStorage.setItem("glass", String(glass));
