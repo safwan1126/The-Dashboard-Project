@@ -24,14 +24,6 @@ const MONTHS = [
 
 /* ---------- task ---------- */
 type Task = { name: string; time: string; done: boolean; starred: boolean };
-const INITIAL_TASKS: Task[] = [
-  { name: "Review PRD draft", time: "09:30", done: true, starred: true },
-  { name: "Design sync with dev", time: "11:00", done: true, starred: true },
-  { name: "Gym – push day", time: "13:00", done: false, starred: true },
-  { name: "Ship dashboard mockups", time: "15:30", done: false, starred: true },
-  { name: "Write weekly notes", time: "18:00", done: false, starred: false },
-  { name: "Read 20 pages", time: "21:30", done: false, starred: false },
-];
 
 /* ---------- habits ---------- */
 // frequency: days of week (0=Sun..6=Sat) the habit is scheduled on; empty = every day
@@ -159,7 +151,7 @@ export default function Dashboard({
     : "";
 
   /* ---------- tasks (shared between screens) ---------- */
-  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const addInputRef = useRef<HTMLInputElement>(null);
@@ -207,33 +199,21 @@ export default function Dashboard({
     setTasksDraft("");
   }
 
-  // On mount, fetch tasks from Microsoft and merge any new ones in
+  // On mount, fetch tasks from Microsoft
   useEffect(() => {
     if (!microsoftConnected) return;
     fetchMicrosoftTasks().then((remoteTasks) => {
-      if (!remoteTasks.length) return;
-      setTasks((prev) => {
-        const existingNames = new Set(prev.map((t) => t.name));
-        const newTasks = remoteTasks
-          .filter((rt) => !existingNames.has(rt.name))
-          .map((rt) => ({
-            name: rt.name,
-            time: "--:--",
-            done: rt.done,
-            starred: false,
-          }));
-        // Also update done status for tasks that exist in both places
-        const updated = prev.map((t) => {
-          const remote = remoteTasks.find((rt) => rt.name === t.name);
-          return remote ? { ...t, done: remote.done } : t;
-        });
-        return [...updated, ...newTasks];
-      });
+      setTasks(remoteTasks.map((rt) => ({
+        name: rt.name,
+        time: "--:--",
+        done: rt.done,
+        starred: false,
+      })));
       isFirstRender.current = false;
     });
   }, []);
 
-  // Auto-sync to Microsoft on every task change (skip the initial mount)
+  // Auto-sync to Microsoft on every task change (skip the initial fetch)
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     if (!microsoftConnected) return;
@@ -553,44 +533,61 @@ export default function Dashboard({
             <div className="card">
               <div className="card-head">
                 <div className="card-title">To-Do List</div>
-                <span className="tag plain"><span className="num">{doneCount}/{starredTasks.length}</span></span>
+                {microsoftConnected && <span className="tag plain"><span className="num">{doneCount}/{starredTasks.length}</span></span>}
               </div>
-              <div className="todo-prog">
-                <div className="bar"><i style={{ width: `${progressPct}%` }} /></div>
-              </div>
-              <div className="todo-list">
-                {starredTasks.map((t, i) => (
-                  <div
-                    key={i}
-                    className={"todo-item" + (t.done ? " done" : "")}
-                    onClick={() => toggleTask(tasks.indexOf(t))}
-                  >
-                    <span className="check"><CheckIcon /></span>
-                    <span className="name">{t.name}</span>
-                    <span className="time">{t.time}</span>
+              {microsoftConnected ? (
+                <>
+                  <div className="todo-prog">
+                    <div className="bar"><i style={{ width: `${progressPct}%` }} /></div>
                   </div>
-                ))}
-              </div>
-              {adding ? (
-                <input
-                  ref={addInputRef}
-                  className="add-input"
-                  placeholder="Task name, then Enter…"
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") finishAdd(true);
-                    if (e.key === "Escape") finishAdd(false);
-                  }}
-                  onBlur={() => finishAdd(true)}
-                />
+                  <div className="todo-list">
+                    {starredTasks.map((t, i) => (
+                      <div
+                        key={i}
+                        className={"todo-item" + (t.done ? " done" : "")}
+                        onClick={() => toggleTask(tasks.indexOf(t))}
+                      >
+                        <span className="check"><CheckIcon /></span>
+                        <span className="name">{t.name}</span>
+                        <span className="time">{t.time}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {adding ? (
+                    <input
+                      ref={addInputRef}
+                      className="add-input"
+                      placeholder="Task name, then Enter…"
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") finishAdd(true);
+                        if (e.key === "Escape") finishAdd(false);
+                      }}
+                      onBlur={() => finishAdd(true)}
+                    />
+                  ) : (
+                    <button className="add-task" onClick={() => setAdding(true)}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                      Add task
+                    </button>
+                  )}
+                </>
               ) : (
-                <button className="add-task" onClick={() => setAdding(true)}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                  Add task
-                </button>
+                <div className="todo-connect-prompt">
+                  <p className="todo-connect-msg">Connect Microsoft To Do to manage your tasks — they'll sync across all your devices.</p>
+                  <a href="/auth/microsoft" className="ms-connect-btn">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                      <rect x="1" y="1" width="10" height="10" fill="#f25022"/>
+                      <rect x="13" y="1" width="10" height="10" fill="#7fba00"/>
+                      <rect x="1" y="13" width="10" height="10" fill="#00a4ef"/>
+                      <rect x="13" y="13" width="10" height="10" fill="#ffb900"/>
+                    </svg>
+                    Connect Microsoft To Do
+                  </a>
+                </div>
               )}
             </div>
 
@@ -667,6 +664,19 @@ export default function Dashboard({
               <div className="cal-head">
                 <div className="m">{calLabel}</div>
                 <div className="cal-nav">
+                  <a
+                    href="https://calendar.google.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="cal-open-btn"
+                    title="Open Google Calendar"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                  </a>
                   {!calIsToday && (
                     <button
                       className="cal-today-btn"
@@ -873,21 +883,40 @@ export default function Dashboard({
       ) : screen === "tasks" ? (
         /* ===== TASKS SCREEN ===== */
         <div className="tasks-screen">
+          {!microsoftConnected ? (
+            <div className="tasks-connect-wall">
+              <div className="tasks-connect-inner">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="40" height="40" style={{ opacity: 0.35 }}>
+                  <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                </svg>
+                <h2 className="tasks-connect-title">Tasks require Microsoft To Do</h2>
+                <p className="tasks-connect-msg">Your tasks are stored in Microsoft To Do and sync across all your devices. Connect your account to get started.</p>
+                <a href="/auth/microsoft" className="ms-connect-btn">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                    <rect x="1" y="1" width="10" height="10" fill="#f25022"/>
+                    <rect x="13" y="1" width="10" height="10" fill="#7fba00"/>
+                    <rect x="1" y="13" width="10" height="10" fill="#00a4ef"/>
+                    <rect x="13" y="13" width="10" height="10" fill="#ffb900"/>
+                  </svg>
+                  Connect Microsoft To Do
+                </a>
+              </div>
+            </div>
+          ) : (
+          <>
           <div className="tasks-header">
             <div>
               <h1 className="tasks-title">All Tasks</h1>
               <p className="tasks-sub">{tasks.length} tasks · {tasks.filter(t => t.starred).length} pinned to To-Do</p>
             </div>
             <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              {microsoftConnected && (
-                <span className={"ms-sync-btn" + (syncStatus === "success" ? " success" : syncStatus === "error" ? " error" : "")}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13" className={syncing ? "spin" : ""}>
-                    <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-                    <path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-                  </svg>
-                  {syncing ? "Syncing…" : syncStatus === "success" ? "Synced!" : syncStatus === "error" ? "Sync failed" : "Auto-sync on"}
-                </span>
-              )}
+              <span className={"ms-sync-btn" + (syncStatus === "success" ? " success" : syncStatus === "error" ? " error" : "")}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13" className={syncing ? "spin" : ""}>
+                  <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                  <path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                </svg>
+                {syncing ? "Syncing…" : syncStatus === "success" ? "Synced!" : syncStatus === "error" ? "Sync failed" : "Auto-sync on"}
+              </span>
               <button className="add-task tasks-add-btn" onClick={() => setTasksAdding(true)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                   <path d="M12 5v14M5 12h14" />
@@ -989,6 +1018,8 @@ export default function Dashboard({
               </>
             );
           })()}
+          </>
+          )}
         </div>
       ) : null}
 

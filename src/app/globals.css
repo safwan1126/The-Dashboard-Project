@@ -360,10 +360,12 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 /* ============ CALENDAR ============ */
 .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
 .cal-head .m { font-family: var(--serif); font-size: 20px; font-weight: 600; white-space: nowrap; }
-.cal-nav { display: flex; gap: 8px; }
-.cal-nav button { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line);
+.cal-nav { display: flex; gap: 8px; align-items: center; }
+.cal-nav button { height: 28px; border-radius: 8px; border: 1px solid var(--line);
   background: transparent; color: var(--ink-2); cursor: pointer; display: grid; place-items: center;
   font-size: 15px; transition: background .15s, color .15s; }
+.cal-nav button[aria-label="Previous day"],
+.cal-nav button[aria-label="Next day"] { width: 28px; }
 .cal-nav button:hover { background: oklch(var(--tint) / 0.03); }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .cal-grid .wd { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; color: var(--ink-4);
@@ -380,8 +382,16 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .cal-empty { font-size: 13px; color: var(--ink-3); padding: 6px 2px 2px; }
 
 /* Day-view timeline */
-.cal-nav button.cal-today-btn {
-  width: auto; height: 28px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--line);
+.cal-open-btn {
+  width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line);
+  background: transparent; color: var(--ink-3); cursor: pointer;
+  display: grid; place-items: center; text-decoration: none;
+  transition: background .15s, color .15s;
+}
+.cal-open-btn:hover { background: oklch(var(--tint) / 0.03); color: var(--ink); }
+.cal-open-btn svg { width: 14px; height: 14px; }
+.cal-today-btn {
+  height: 28px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--line);
   background: transparent; color: var(--ink-2); cursor: pointer;
   font-family: var(--sans); font-size: 11.5px; font-weight: 600;
   transition: background .15s, color .15s;
@@ -508,6 +518,16 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 
 /* ============ TASKS SCREEN ============ */
 .tasks-screen { max-width: 720px; margin: 0 auto; padding: 0 0 60px; }
+
+/* tasks connect wall */
+.tasks-connect-wall { display: flex; align-items: center; justify-content: center; min-height: 400px; }
+.tasks-connect-inner { display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; max-width: 340px; }
+.tasks-connect-title { font-size: 1.15rem; font-weight: 600; color: var(--ink); margin: 0; }
+.tasks-connect-msg { font-size: 0.85rem; color: var(--ink-3); line-height: 1.6; margin: 0; }
+
+/* home todo card connect prompt */
+.todo-connect-prompt { display: flex; flex-direction: column; gap: 12px; padding: 8px 0 4px; }
+.todo-connect-msg { font-size: 0.82rem; color: var(--ink-3); line-height: 1.6; margin: 0; }
 .tasks-header {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 32px;
