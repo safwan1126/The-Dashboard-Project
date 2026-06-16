@@ -917,11 +917,17 @@ export default function Dashboard({
                 </svg>
                 {syncing ? "Syncing…" : syncStatus === "success" ? "Synced!" : syncStatus === "error" ? "Sync failed" : "Auto-sync on"}
               </span>
-              <button className="add-task tasks-add-btn" onClick={() => setTasksAdding(true)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-                New task
+              <button className={"add-task tasks-add-btn" + (tasksAdding ? " cancelling" : "")} onClick={() => { setTasksAdding((v) => !v); setTasksDraft(""); }}>
+                {tasksAdding ? (
+                  "Cancel"
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    New task
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -986,7 +992,6 @@ export default function Dashboard({
                               if (e.key === "Enter") finishTasksAdd(true);
                               if (e.key === "Escape") finishTasksAdd(false);
                             }}
-                            onBlur={() => finishTasksAdd(true)}
                           />
                         </div>
                       )}
@@ -1009,7 +1014,6 @@ export default function Dashboard({
                             if (e.key === "Enter") finishTasksAdd(true);
                             if (e.key === "Escape") finishTasksAdd(false);
                           }}
-                          onBlur={() => finishTasksAdd(true)}
                         />
                       </div>
                     </div>
