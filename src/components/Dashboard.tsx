@@ -423,6 +423,9 @@ export default function Dashboard({
   const CIRC = 515.2;
   const [remain, setRemain] = useState(TOTAL);
   const [running, setRunning] = useState(false);
+  const [pomoTaskIdx, setPomoTaskIdx] = useState<number | null>(null);
+  const [pomoTaskChosen, setPomoTaskChosen] = useState(false);
+  const [pomoPickerOpen, setPomoPickerOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -446,6 +449,9 @@ export default function Dashboard({
   function resetPomo() {
     setRunning(false);
     setRemain(TOTAL);
+    setPomoTaskIdx(null);
+    setPomoTaskChosen(false);
+    setPomoPickerOpen(false);
   }
 
   const pomoTime = `${pad(Math.floor(remain / 60))}:${pad(remain % 60)}`;
@@ -453,6 +459,34 @@ export default function Dashboard({
 
   return (
     <div className="stage">
+      {/* ===== TASK PICKER MODAL ===== */}
+      {pomoPickerOpen && !running && (
+        <div className="pomo-modal-backdrop" onClick={() => setPomoPickerOpen(false)}>
+          <div className="pomo-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="pomo-modal-title">Focus on a task</div>
+            <div className="pomo-modal-list">
+              <button
+                className={"pomo-picker-item" + (pomoTaskChosen && pomoTaskIdx === null ? " active" : "")}
+                onClick={() => { setPomoTaskIdx(null); setPomoTaskChosen(true); setPomoPickerOpen(false); }}
+              >
+                No task
+              </button>
+              {tasks.filter((t) => !t.done).map((t) => {
+                const idx = tasks.indexOf(t);
+                return (
+                  <button
+                    key={idx}
+                    className={"pomo-picker-item" + (pomoTaskIdx === idx ? " active" : "")}
+                    onClick={() => { setPomoTaskIdx(idx); setPomoTaskChosen(true); setPomoPickerOpen(false); }}
+                  >
+                    {t.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
       {/* ===== TOP BAR ===== */}
       <header className="topbar">
         <div className="brand">
@@ -839,11 +873,25 @@ export default function Dashboard({
                     </div>
                   </div>
                 </div>
+                {pomoTaskChosen && pomoTaskIdx !== null && tasks[pomoTaskIdx] && (
+                  <div className="pomo-active-task">{tasks[pomoTaskIdx].name}</div>
+                )}
                 <div className="pomo-ctrl">
-                  <button className="pbtn-main" onClick={() => setRunning((r) => !r)}>
-                    {running ? <PauseIcon /> : <PlayIcon />}
-                    {running ? "Pause" : "Start"}
-                  </button>
+                  <div className="pomo-btn-wrap">
+                    {!pomoTaskChosen ? (
+                      <button className="pbtn-main" onClick={() => setPomoPickerOpen(true)}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                          <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                        </svg>
+                        Select a task
+                      </button>
+                    ) : (
+                      <button className="pbtn-main" onClick={() => setRunning((r) => !r)}>
+                        {running ? <PauseIcon /> : <PlayIcon />}
+                        {running ? "Pause" : "Start"}
+                      </button>
+                    )}
+                  </div>
                   <button className="pbtn-reset" aria-label="Reset" onClick={resetPomo}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M1 4v6h6" />

@@ -490,6 +490,36 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .pomo-dots { display: flex; gap: 7px; margin-top: 22px; }
 .pomo-dots i { width: 7px; height: 7px; border-radius: 50%; background: oklch(var(--tint) / 0.16); }
 .pomo-dots i.done { background: var(--sage); }
+.pomo-active-task {
+  font-size: 13px; color: var(--ink-2); text-align: center; margin-bottom: 14px;
+  max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pomo-btn-wrap { position: relative; flex: 1; }
+.pomo-btn-wrap .pbtn-main { width: 100%; }
+.pomo-modal-backdrop {
+  position: fixed; inset: 0; z-index: 100;
+  background: oklch(0% 0 0 / 0.35); backdrop-filter: blur(6px);
+  display: grid; place-items: center;
+}
+.pomo-modal {
+  background: var(--card); border-radius: var(--radius); width: 360px; max-width: 90vw;
+  box-shadow: 0 24px 60px oklch(0% 0 0 / 0.2);
+  border: 1.5px solid oklch(var(--tint) / 0.1); overflow: hidden;
+}
+.pomo-modal-title {
+  font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-3); padding: 18px 18px 10px;
+}
+.pomo-modal-list { max-height: 320px; overflow-y: auto; padding-bottom: 8px; }
+.pomo-picker-item {
+  display: block; width: 100%; padding: 9px 13px; text-align: left;
+  background: none; border: none; border-bottom: 1px solid oklch(var(--tint) / 0.08);
+  color: var(--ink); font-size: 13px; font-family: inherit; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pomo-picker-item:last-child { border-bottom: none; }
+.pomo-picker-item:hover { background: oklch(var(--tint) / 0.05); }
+.pomo-picker-item.active { color: var(--sage); font-weight: 600; }
 
 /* ============ ACTIVITY ============ */
 .heat { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 1fr); gap: 4px; margin-bottom: 16px; }
