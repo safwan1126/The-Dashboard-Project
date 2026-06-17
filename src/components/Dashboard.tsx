@@ -454,9 +454,12 @@ export default function Dashboard({
   }, []);
 
   /* ---------- pomodoro ---------- */
-  const POMO_TOTAL = 25 * 60;
   const POMO_R = 160;
   const POMO_CIRC = 2 * Math.PI * POMO_R;
+  const [pomoMinutes, setPomoMinutes] = useState(25);
+  const [pomoSettingsOpen, setPomoSettingsOpen] = useState(false);
+  const [pomoCustomInput, setPomoCustomInput] = useState("");
+  const POMO_TOTAL = pomoMinutes * 60;
   const [pomoRemain, setPomoRemain] = useState(POMO_TOTAL);
   const [pomoRunning, setPomoRunning] = useState(false);
   const [pomoTaskName, setPomoTaskName] = useState<string | null>(null);
@@ -499,6 +502,16 @@ export default function Dashboard({
     setPomoTaskName(null);
     setPomoTaskChosen(false);
     setPomoPickerOpen(false);
+  }
+
+  function applyPomoMinutes(mins: number) {
+    setPomoMinutes(mins);
+    setPomoRemain(mins * 60);
+    setPomoRunning(false);
+    setPomoTaskName(null);
+    setPomoTaskChosen(false);
+    setPomoSettingsOpen(false);
+    setPomoCustomInput("");
   }
 
   const pomoTime = `${pad(Math.floor(pomoRemain / 60))}:${pad(pomoRemain % 60)}`;
@@ -1187,6 +1200,43 @@ export default function Dashboard({
                   )}
                 </div>
               </div>
+              {pomoSettingsOpen && (
+                <div className="pomo-settings">
+                  <div className="pomo-settings-label">Duration (minutes)</div>
+                  <div className="pomo-settings-presets">
+                    {[5, 10, 15, 20, 25, 30, 45, 60].map(m => (
+                      <button
+                        key={m}
+                        className={"pomo-settings-preset" + (pomoMinutes === m && !pomoCustomInput ? " active" : "")}
+                        onClick={() => applyPomoMinutes(m)}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="pomo-settings-custom">
+                    <input
+                      className="pomo-settings-input"
+                      type="number" min="1" max="240" placeholder="Custom"
+                      value={pomoCustomInput}
+                      onChange={e => setPomoCustomInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") {
+                          const v = parseInt(pomoCustomInput);
+                          if (v >= 1 && v <= 240) applyPomoMinutes(v);
+                        }
+                      }}
+                    />
+                    <button
+                      className="pomo-settings-apply"
+                      disabled={!pomoCustomInput || parseInt(pomoCustomInput) < 1 || parseInt(pomoCustomInput) > 240}
+                      onClick={() => { const v = parseInt(pomoCustomInput); if (v >= 1 && v <= 240) applyPomoMinutes(v); }}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="pomo-page-ctrl">
                 <div className="pomo-btn-wrap" style={{ flex: 1 }}>
                   {!pomoTaskChosen ? (
@@ -1221,6 +1271,17 @@ export default function Dashboard({
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M1 4v6h6" />
                     <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                </button>
+                <button
+                  className={"pbtn-reset pomo-page-reset" + (pomoSettingsOpen ? " active" : "")}
+                  aria-label="Settings" title="Timer settings"
+                  disabled={pomoRunning}
+                  onClick={() => { setPomoSettingsOpen(o => !o); setPomoCustomInput(""); }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                   </svg>
                 </button>
               </div>

@@ -488,6 +488,41 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .pbtn-reset:hover { background: oklch(var(--tint) / 0.03); }
 .pbtn-reset:disabled { opacity: 0.35; cursor: not-allowed; }
 .pbtn-reset svg { width: 16px; height: 16px; }
+/* ---- pomodoro settings ---- */
+.pomo-settings {
+  width: 100%; max-width: 380px;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 16px 18px;
+  margin-bottom: 12px;
+}
+.pomo-settings-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 12px;
+}
+.pomo-settings-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.pomo-settings-preset {
+  padding: 5px 11px; border-radius: 6px; border: 1px solid var(--line);
+  background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.pomo-settings-preset:hover { background: oklch(var(--tint) / 0.05); }
+.pomo-settings-preset.active { background: var(--sage-faint); border-color: var(--sage-soft); color: var(--sage-deep); }
+.pomo-settings-custom { display: flex; gap: 8px; }
+.pomo-settings-input {
+  flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line);
+  background: transparent; color: var(--ink); font-size: 13px; font-family: var(--sans);
+  outline: none;
+}
+.pomo-settings-input:focus { border-color: var(--sage-soft); }
+.pomo-settings-apply {
+  padding: 6px 14px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--sage-faint); color: var(--sage-deep); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s;
+}
+.pomo-settings-apply:hover:not(:disabled) { background: var(--sage-soft); }
+.pomo-settings-apply:disabled { opacity: 0.4; cursor: not-allowed; }
+.pbtn-reset.active { background: var(--sage-faint); border-color: var(--sage-soft); color: var(--sage-deep); }
+
 /* ---- pomodoro timeline ---- */
 .pomo-tl { max-width: 680px; margin: 40px auto 0; padding: 0 4px; }
 .pomo-tl-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
