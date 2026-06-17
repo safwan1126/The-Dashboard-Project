@@ -12,7 +12,7 @@ export default async function LoginPage({
   return (
     <div className={styles.shell}>
       <div className={styles.card}>
-        <div className={styles.brand}>NeeyazOS</div>
+        <div className={styles.brand}>LifeOS</div>
         <h1 className={styles.title}>Welcome back</h1>
         <p className={styles.sub}>Sign in to open your dashboard</p>
 

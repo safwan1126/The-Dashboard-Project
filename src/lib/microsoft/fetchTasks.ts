@@ -4,7 +4,7 @@ import { getAccessToken } from "./getAccessToken";
 
 type MsTask = { id: string; title: string; status: string };
 
-const LIST_NAME = "NeeyazOS";
+const LIST_NAME = "LifeOS";
 
 export type RemoteTask = { id: string; name: string; done: boolean };
 
@@ -12,7 +12,7 @@ export async function fetchMicrosoftTasks(): Promise<RemoteTask[]> {
   const accessToken = await getAccessToken();
   if (!accessToken) return [];
 
-  // Find the NeeyazOS list
+  // Find the LifeOS list
   const listsRes = await fetch("https://graph.microsoft.com/v1.0/me/todo/lists", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });

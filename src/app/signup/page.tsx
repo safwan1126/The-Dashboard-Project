@@ -12,7 +12,7 @@ export default async function SignupPage({
   return (
     <div className={styles.shell}>
       <div className={styles.card}>
-        <div className={styles.brand}>NeeyazOS</div>
+        <div className={styles.brand}>LifeOS</div>
         <h1 className={styles.title}>Create your account</h1>
         <p className={styles.sub}>Set up your personal operating system</p>
 

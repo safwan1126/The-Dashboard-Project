@@ -556,7 +556,7 @@ export default function Dashboard({
       {/* ===== TOP BAR ===== */}
       <header className="topbar">
         <div className="brand">
-          <div className="name">NeeyazOS</div>
+          <div className="name">LifeOS</div>
           <div className="sub">Personal operating system</div>
         </div>
         <nav className="screen-nav">

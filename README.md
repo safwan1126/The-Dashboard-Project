@@ -1,4 +1,4 @@
-# NeeyazOS
+# LifeOS
 
 A personal dashboard — Next.js (App Router) + Supabase Auth, deployed on Vercel.
 

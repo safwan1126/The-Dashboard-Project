@@ -4,9 +4,9 @@ import { getAccessToken } from "./getAccessToken";
 
 type Task = { name: string; time: string; done: boolean; starred: boolean };
 
-const LIST_NAME = "NeeyazOS";
+const LIST_NAME = "LifeOS";
 
-// Get or create the NeeyazOS task list in Microsoft To Do
+// Get or create the LifeOS task list in Microsoft To Do
 async function getOrCreateList(accessToken: string): Promise<string> {
   const res = await fetch("https://graph.microsoft.com/v1.0/me/todo/lists", {
     headers: { Authorization: `Bearer ${accessToken}` },

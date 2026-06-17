@@ -16,7 +16,7 @@ export default function Loading() {
         color: "var(--ink-3)",
       }}
     >
-      <style>{`@keyframes neeyazPulse{0%,100%{opacity:.45}50%{opacity:1}}`}</style>
+      <style>{`@keyframes lifePulse{0%,100%{opacity:.45}50%{opacity:1}}`}</style>
       <div
         style={{
           fontFamily: "var(--serif)",
@@ -24,10 +24,10 @@ export default function Loading() {
           fontWeight: 600,
           color: "var(--ink)",
           letterSpacing: "-0.01em",
-          animation: "neeyazPulse 1.4s ease-in-out infinite",
+          animation: "lifePulse 1.4s ease-in-out infinite",
         }}
       >
-        NeeyazOS
+        LifeOS
       </div>
       <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
         Loading…
