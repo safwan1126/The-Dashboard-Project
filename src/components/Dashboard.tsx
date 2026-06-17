@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { syncTasksToMicrosoft, deleteTaskFromMicrosoft } from "@/lib/microsoft/syncTasks";
 import { fetchMicrosoftTasks } from "@/lib/microsoft/fetchTasks";
 import { fetchDayEvents, type CalendarEvent } from "@/lib/google/fetchEvents";
@@ -143,14 +143,18 @@ export default function Dashboard({
   initialHabits: Habit[];
 }) {
   /* ---------- screen ---------- */
-  const router = useRouter();
+  // Views are switched with the History API (shallow routing) rather than
+  // router.push. Pushing a new route would refetch this dynamic page's server
+  // payload on every tab click; pushState updates the URL — and useSearchParams,
+  // which stays in sync — without any server round-trip.
   const searchParams = useSearchParams();
   const screen = (searchParams.get("screen") ?? "home") as "home" | "tasks" | "habits" | "pomodoro";
   function setScreen(s: "home" | "tasks" | "habits" | "pomodoro") {
     const params = new URLSearchParams(searchParams.toString());
     if (s === "home") params.delete("screen");
     else params.set("screen", s);
-    router.push(`?${params.toString()}`);
+    const qs = params.toString();
+    window.history.pushState(null, "", qs ? `?${qs}` : window.location.pathname);
   }
 
   /* ---------- microsoft sync ---------- */
@@ -158,25 +162,32 @@ export default function Dashboard({
   const [syncStatus, setSyncStatus] = useState<"idle" | "success" | "error">("idle");
   const isFirstRender = useRef(true);
 
-  /* ---------- clock ---------- */
   /* ---------- dark mode ---------- */
+  // Start at `false` to match server render (no hydration mismatch). The inline
+  // script in the root layout has already applied the saved theme before paint;
+  // on mount we adopt that value instead of re-writing it, so we never clobber
+  // the attribute/localStorage or flash light→dark.
   const [darkMode, setDarkMode] = useState(false);
+  const darkMounted = useRef(false);
   useEffect(() => {
-    const stored = localStorage.getItem("darkMode");
-    if (stored === "true") setDarkMode(true);
-  }, []);
-  useEffect(() => {
+    if (!darkMounted.current) {
+      darkMounted.current = true;
+      setDarkMode(document.documentElement.dataset.mood === "Charcoal");
+      return;
+    }
     document.documentElement.setAttribute("data-mood", darkMode ? "Charcoal" : "");
     localStorage.setItem("darkMode", String(darkMode));
   }, [darkMode]);
 
   /* ---------- glass mode ---------- */
   const [glass, setGlass] = useState(false);
+  const glassMounted = useRef(false);
   useEffect(() => {
-    const stored = localStorage.getItem("glass");
-    if (stored === "true") setGlass(true);
-  }, []);
-  useEffect(() => {
+    if (!glassMounted.current) {
+      glassMounted.current = true;
+      setGlass(document.documentElement.dataset.glass === "on");
+      return;
+    }
     document.documentElement.setAttribute("data-glass", glass ? "on" : "");
     localStorage.setItem("glass", String(glass));
   }, [glass]);

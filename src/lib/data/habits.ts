@@ -15,24 +15,35 @@ function todayDate(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export async function getHabits(): Promise<HabitRow[]> {
+// `userId` may be passed by callers that have already resolved the user (e.g.
+// the page server component) to avoid a redundant auth.getUser() round-trip.
+// Per-user access is enforced by RLS regardless of the id passed here.
+export async function getHabits(userId?: string): Promise<HabitRow[]> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  let uid = userId;
+  if (!uid) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+    uid = user.id;
+  }
 
-  const { data: habits, error } = await supabase
-    .from("habits")
-    .select("id, name, strk, frequency")
-    .order("created_at", { ascending: true });
+  const [
+    { data: habits, error },
+    { data: completions, error: compError },
+  ] = await Promise.all([
+    supabase
+      .from("habits")
+      .select("id, name, strk, frequency")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("habit_completions")
+      .select("habit_id")
+      .eq("user_id", uid)
+      .eq("date", todayDate()),
+  ]);
   if (error) throw error;
-
-  const { data: completions, error: compError } = await supabase
-    .from("habit_completions")
-    .select("habit_id")
-    .eq("user_id", user.id)
-    .eq("date", todayDate());
   if (compError) throw compError;
 
   const doneToday = new Set((completions ?? []).map((c) => c.habit_id));
