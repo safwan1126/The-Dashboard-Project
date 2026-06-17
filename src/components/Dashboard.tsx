@@ -12,6 +12,7 @@ import {
   toggleHabitToday as toggleHabitTodayAction,
   type HabitRow,
 } from "@/lib/data/habits";
+import { addPomoSession, getPomoSessions } from "@/lib/data/pomoSessions";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -31,6 +32,40 @@ type Task = { msId?: string; name: string; time: string; done: boolean; starred:
 type Habit = HabitRow;
 
 const DAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
+
+/* ---------- pomodoro history ---------- */
+type PomoSession = { task: string | null; completedAt: number; duration: number };
+
+const POMO_PALETTE = [
+  "oklch(0.62 0.12 155)",
+  "oklch(0.65 0.13 45)",
+  "oklch(0.60 0.13 230)",
+  "oklch(0.60 0.12 295)",
+  "oklch(0.65 0.12 340)",
+  "oklch(0.68 0.12 110)",
+];
+
+function pomoTaskColor(task: string | null, history: PomoSession[]): string {
+  if (task === null) return "oklch(var(--tint) / 0.28)";
+  const seen = [...new Set(history.filter(s => s.task !== null).map(s => s.task as string))];
+  return POMO_PALETTE[Math.max(seen.indexOf(task), 0) % POMO_PALETTE.length];
+}
+
+function formatHHMM(ms: number): string {
+  const d = new Date(ms);
+  const h = d.getHours(), m = d.getMinutes();
+  return `${h % 12 || 12}:${pad(m)} ${h >= 12 ? "PM" : "AM"}`;
+}
+
+function dayLabel(dateKey: string): string {
+  const [y, mo, d] = dateKey.split("-").map(Number);
+  const date = new Date(y, mo - 1, d);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  if (date >= today) return "Today";
+  if (date >= yesterday) return "Yesterday";
+  return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
 
 /* ---------- heatmap ---------- */
 const SHADES = [
@@ -427,8 +462,19 @@ export default function Dashboard({
   const [pomoTaskName, setPomoTaskName] = useState<string | null>(null);
   const [pomoTaskChosen, setPomoTaskChosen] = useState(false);
   const [pomoPickerOpen, setPomoPickerOpen] = useState(false);
-  const [pomoSessions, setPomoSessions] = useState(0);
+  const [pomoHistory, setPomoHistory] = useState<PomoSession[]>([]);
   const pomoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    getPomoSessions(14)
+      .then(rows => setPomoHistory(rows.map(r => ({ task: r.taskName, completedAt: r.completedAt, duration: r.duration }))))
+      .catch(console.error);
+  }, []);
+
+  function recordPomoSession(task: string | null, completedAt: number, duration: number) {
+    setPomoHistory(h => [...h, { task, completedAt, duration }]);
+    addPomoSession(task, completedAt, duration).catch(console.error);
+  }
 
   useEffect(() => {
     if (pomoRunning) {
@@ -437,7 +483,7 @@ export default function Dashboard({
           if (r > 1) return r - 1;
           if (pomoTimerRef.current) clearInterval(pomoTimerRef.current);
           setPomoRunning(false);
-          setPomoSessions((s) => s + 1);
+          recordPomoSession(pomoTaskName, Date.now(), POMO_TOTAL);
           return 0;
         });
       }, 1000);
@@ -1163,8 +1209,8 @@ export default function Dashboard({
                 <button className="pbtn-reset pomo-page-reset" aria-label="Skip to end" title="Skip to end" disabled={pomoRemain === POMO_TOTAL || pomoRemain === 0} onClick={() => {
                   if (pomoTimerRef.current) clearInterval(pomoTimerRef.current);
                   setPomoRunning(false);
+                  recordPomoSession(pomoTaskName, Date.now(), POMO_TOTAL - pomoRemain);
                   setPomoRemain(0);
-                  setPomoSessions((s) => s + 1);
                 }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polygon points="5 4 15 12 5 20 5 4" />
@@ -1180,6 +1226,77 @@ export default function Dashboard({
               </div>
             </div>
           </div>
+          {(() => {
+            const TL_START = 6 * 3600;
+            const TL_END = 24 * 3600;
+            const TL_RANGE = TL_END - TL_START;
+            const HOUR_MARKS = [6, 9, 12, 15, 18, 21, 24];
+
+            // Group sessions by calendar date key "YYYY-MM-DD"
+            const grouped = new Map<string, PomoSession[]>();
+            // Always include today even if empty
+            const todayKey = (() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; })();
+            grouped.set(todayKey, []);
+            pomoHistory.forEach(s => {
+              const d = new Date(s.completedAt);
+              const key = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+              if (!grouped.has(key)) grouped.set(key, []);
+              grouped.get(key)!.push(s);
+            });
+            const sortedDays = [...grouped.entries()].sort(([a], [b]) => b.localeCompare(a));
+            const uniqueTasks = [...new Map(pomoHistory.map(s => [s.task, s])).values()];
+
+            return (
+              <div className="pomo-tl">
+                {sortedDays.map(([key, sessions]) => {
+                  const [y, mo, d] = key.split("-").map(Number);
+                  const dayStartMs = new Date(y, mo - 1, d).getTime();
+                  const totalMin = Math.round(sessions.reduce((a, s) => a + s.duration, 0) / 60);
+                  return (
+                    <div key={key} className="pomo-tl-day">
+                      <div className="pomo-tl-header">
+                        <span className="pomo-tl-label">{dayLabel(key)}</span>
+                        {sessions.length > 0 && (
+                          <span className="pomo-tl-meta">{sessions.length} session{sessions.length !== 1 ? "s" : ""} · {totalMin} min</span>
+                        )}
+                      </div>
+                      <div className="pomo-tl-track">
+                        {HOUR_MARKS.map(h => (
+                          <div key={h} className="pomo-tl-mark" style={{ left: `${((h * 3600 - TL_START) / TL_RANGE) * 100}%` }}>
+                            <span>{h < 12 ? `${h}am` : h === 12 ? "12pm" : h === 24 ? "12am" : `${h - 12}pm`}</span>
+                          </div>
+                        ))}
+                        {sessions.map((s, i) => {
+                          const startSec = (s.completedAt - dayStartMs) / 1000 - s.duration;
+                          const leftPct = Math.max(0, (startSec - TL_START) / TL_RANGE) * 100;
+                          const widthPct = Math.min(100 - leftPct, (s.duration / TL_RANGE) * 100);
+                          const tooltip = `${s.task ?? "No task"}\n${formatHHMM(s.completedAt - s.duration * 1000)} – ${formatHHMM(s.completedAt)}`;
+                          return (
+                            <div
+                              key={i}
+                              className="pomo-tl-block"
+                              style={{ left: `${leftPct}%`, width: `${Math.max(widthPct, 0.5)}%`, background: pomoTaskColor(s.task, pomoHistory) }}
+                              data-tooltip={tooltip}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+                {uniqueTasks.length > 0 && (
+                  <div className="pomo-tl-legend">
+                    {uniqueTasks.map((s, i) => (
+                      <span key={i} className="pomo-tl-legend-item">
+                        <i style={{ background: pomoTaskColor(s.task, pomoHistory) }} />
+                        {s.task ?? "No task"}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </>
       )}
 
