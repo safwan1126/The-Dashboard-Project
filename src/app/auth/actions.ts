@@ -30,6 +30,7 @@ export async function signUp(formData: FormData) {
     password: String(formData.get("password") || ""),
     options: {
       emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/auth/callback`,
+      data: { full_name: String(formData.get("fullName") || "").trim() },
     },
   };
 

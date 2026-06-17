@@ -20,6 +20,10 @@ export default async function SignupPage({
 
         <form action={signUp} className={styles.form}>
           <label className={styles.label}>
+            Name
+            <input className={styles.input} type="text" name="fullName" required autoComplete="name" />
+          </label>
+          <label className={styles.label}>
             Email
             <input className={styles.input} type="email" name="email" required autoComplete="email" />
           </label>

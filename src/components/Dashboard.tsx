@@ -19,6 +19,23 @@ function pad(n: number) {
   return String(n).padStart(2, "0");
 }
 
+// Falls back to a readable name derived from the email for users who signed up
+// before the name field existed (drops purely-numeric segments, title-cases).
+function nameFromEmail(email: string): string {
+  const local = (email.split("@")[0] ?? "").trim();
+  if (!local) return "User";
+  const words = local.split(/[._-]+/).filter((w) => w && !/^\d+$/.test(w));
+  if (words.length === 0) return local;
+  return words.map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
+
+function initialsFrom(displayName: string): string {
+  const parts = displayName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -134,12 +151,14 @@ function TrashIcon() {
 
 export default function Dashboard({
   email,
+  name: initialName,
   microsoftConnected,
   googleConnected,
   initialHabits,
   initialPomo,
 }: {
   email: string;
+  name: string;
   microsoftConnected: boolean;
   googleConnected: boolean;
   initialHabits: Habit[];
@@ -164,6 +183,10 @@ export default function Dashboard({
   const [syncing, startSync] = useTransition();
   const [syncStatus, setSyncStatus] = useState<"idle" | "success" | "error">("idle");
   const isFirstRender = useRef(true);
+
+  /* ---------- profile name ---------- */
+  const displayName = initialName.trim() || nameFromEmail(email);
+  const avatarInitials = initialsFrom(displayName);
 
   /* ---------- dark mode ---------- */
   // Start at `false` to match server render (no hydration mismatch). The inline
@@ -626,14 +649,10 @@ export default function Dashboard({
           {/* ===== LEFT ===== */}
           <div className="col">
             <div className="card profile">
-              <div className="avatar">NA</div>
+              <div className="avatar">{avatarInitials}</div>
               <div>
-                <h2>Neeyaz Ahmed</h2>
+                <h2>{displayName}</h2>
                 <div className="role">{email || "Product designer"}</div>
-                <div className="pills">
-                  <span className="pill">Focused</span>
-                  <span className="pill rose"><span className="num">12</span>-day streak</span>
-                </div>
               </div>
             </div>
 
