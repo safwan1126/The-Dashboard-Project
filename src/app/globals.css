@@ -521,6 +521,28 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .pomo-picker-item:hover { background: oklch(var(--tint) / 0.05); }
 .pomo-picker-item.active { color: var(--sage); font-weight: 600; }
 
+/* ============ POMODORO PAGE ============ */
+.pomo-page { display: flex; flex-direction: column; padding: 32px 48px 48px; }
+.pomo-page-body { display: flex; flex-direction: column; align-items: center; flex: 1; justify-content: center; gap: 0; }
+.pomo-page-task-label {
+  font-size: 15px; line-height: 1.4; color: var(--ink-3); margin-top: 40px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pomo-page-ring { position: relative; margin-bottom: 40px; line-height: 0; }
+.pomo-page-ring svg { display: block; }
+.pomo-page-center {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 260px; text-align: center; pointer-events: none;
+}
+.pomo-page-mode { font-size: 13px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 10px; }
+.pomo-page-time { font-family: var(--serif); font-size: 80px; font-weight: 500; letter-spacing: 0.01em; color: var(--ink); line-height: 1; }
+.pomo-page-task { font-size: 14px; color: var(--ink-2); margin-top: 12px; max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pomo-page-ctrl { display: flex; gap: 12px; width: 100%; max-width: 380px; }
+.pomo-page-btn { font-size: 16px; padding: 18px; }
+.pomo-page-reset { width: 60px; height: 60px; border-radius: var(--radius-sm); flex-shrink: 0; }
+.pomo-page-reset svg { width: 20px; height: 20px; }
+
 /* ============ ACTIVITY ============ */
 .heat { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 1fr); gap: 4px; margin-bottom: 16px; }
 .hc { aspect-ratio: 1; border-radius: 3px; }

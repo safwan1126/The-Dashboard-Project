@@ -110,8 +110,8 @@ export default function Dashboard({
   /* ---------- screen ---------- */
   const router = useRouter();
   const searchParams = useSearchParams();
-  const screen = (searchParams.get("screen") ?? "home") as "home" | "tasks" | "habits";
-  function setScreen(s: "home" | "tasks" | "habits") {
+  const screen = (searchParams.get("screen") ?? "home") as "home" | "tasks" | "habits" | "pomodoro";
+  function setScreen(s: "home" | "tasks" | "habits" | "pomodoro") {
     const params = new URLSearchParams(searchParams.toString());
     if (s === "home") params.delete("screen");
     else params.set("screen", s);
@@ -125,18 +125,22 @@ export default function Dashboard({
 
   /* ---------- clock ---------- */
   /* ---------- dark mode ---------- */
-  const [darkMode, setDarkMode] = useState(() =>
-    typeof window !== "undefined" && localStorage.getItem("darkMode") === "true"
-  );
+  const [darkMode, setDarkMode] = useState(false);
+  useEffect(() => {
+    const stored = localStorage.getItem("darkMode");
+    if (stored === "true") setDarkMode(true);
+  }, []);
   useEffect(() => {
     document.documentElement.setAttribute("data-mood", darkMode ? "Charcoal" : "");
     localStorage.setItem("darkMode", String(darkMode));
   }, [darkMode]);
 
   /* ---------- glass mode ---------- */
-  const [glass, setGlass] = useState(() =>
-    typeof window !== "undefined" && localStorage.getItem("glass") === "true"
-  );
+  const [glass, setGlass] = useState(false);
+  useEffect(() => {
+    const stored = localStorage.getItem("glass");
+    if (stored === "true") setGlass(true);
+  }, []);
   useEffect(() => {
     document.documentElement.setAttribute("data-glass", glass ? "on" : "");
     localStorage.setItem("glass", String(glass));
@@ -415,74 +419,49 @@ export default function Dashboard({
   }, []);
 
   /* ---------- pomodoro ---------- */
-  const TOTAL = 25 * 60;
-  const CIRC = 515.2;
-  const [remain, setRemain] = useState(TOTAL);
-  const [running, setRunning] = useState(false);
-  const [pomoTaskIdx, setPomoTaskIdx] = useState<number | null>(null);
+  const POMO_TOTAL = 25 * 60;
+  const POMO_R = 160;
+  const POMO_CIRC = 2 * Math.PI * POMO_R;
+  const [pomoRemain, setPomoRemain] = useState(POMO_TOTAL);
+  const [pomoRunning, setPomoRunning] = useState(false);
+  const [pomoTaskName, setPomoTaskName] = useState<string | null>(null);
   const [pomoTaskChosen, setPomoTaskChosen] = useState(false);
   const [pomoPickerOpen, setPomoPickerOpen] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [pomoSessions, setPomoSessions] = useState(0);
+  const pomoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (running) {
-      timerRef.current = setInterval(() => {
-        setRemain((r) => {
-          if (r > 0) return r - 1;
-          if (timerRef.current) clearInterval(timerRef.current);
-          setRunning(false);
+    if (pomoRunning) {
+      pomoTimerRef.current = setInterval(() => {
+        setPomoRemain((r) => {
+          if (r > 1) return r - 1;
+          if (pomoTimerRef.current) clearInterval(pomoTimerRef.current);
+          setPomoRunning(false);
+          setPomoSessions((s) => s + 1);
           return 0;
         });
       }, 1000);
-    } else if (timerRef.current) {
-      clearInterval(timerRef.current);
+    } else if (pomoTimerRef.current) {
+      clearInterval(pomoTimerRef.current);
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [running]);
+    return () => { if (pomoTimerRef.current) clearInterval(pomoTimerRef.current); };
+  }, [pomoRunning]);
 
   function resetPomo() {
-    setRunning(false);
-    setRemain(TOTAL);
-    setPomoTaskIdx(null);
+    setPomoRunning(false);
+    setPomoRemain(POMO_TOTAL);
+    setPomoTaskName(null);
     setPomoTaskChosen(false);
     setPomoPickerOpen(false);
   }
 
-  const pomoTime = `${pad(Math.floor(remain / 60))}:${pad(remain % 60)}`;
-  const pomoOffset = (CIRC * (remain / TOTAL)).toFixed(1);
+  const pomoTime = `${pad(Math.floor(pomoRemain / 60))}:${pad(pomoRemain % 60)}`;
+  const pomoOffset = (POMO_CIRC * (pomoRemain / POMO_TOTAL)).toFixed(1);
+  const POMO_SIZE = POMO_R * 2 + 20;
+  const POMO_CX = POMO_SIZE / 2;
 
   return (
     <div className="stage">
-      {/* ===== TASK PICKER MODAL ===== */}
-      {pomoPickerOpen && !running && (
-        <div className="pomo-modal-backdrop" onClick={() => setPomoPickerOpen(false)}>
-          <div className="pomo-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="pomo-modal-title">Focus on a task</div>
-            <div className="pomo-modal-list">
-              <button
-                className={"pomo-picker-item" + (pomoTaskChosen && pomoTaskIdx === null ? " active" : "")}
-                onClick={() => { setPomoTaskIdx(null); setPomoTaskChosen(true); setPomoPickerOpen(false); }}
-              >
-                No task
-              </button>
-              {tasks.filter((t) => !t.done).map((t) => {
-                const idx = tasks.indexOf(t);
-                return (
-                  <button
-                    key={idx}
-                    className={"pomo-picker-item" + (pomoTaskIdx === idx ? " active" : "")}
-                    onClick={() => { setPomoTaskIdx(idx); setPomoTaskChosen(true); setPomoPickerOpen(false); }}
-                  >
-                    {t.name}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
       {/* ===== TOP BAR ===== */}
       <header className="topbar">
         <div className="brand">
@@ -509,6 +488,13 @@ export default function Dashboard({
             onClick={() => setScreen("habits")}
           >
             Habits
+          </button>
+          <span className="screen-nav-sep">|</span>
+          <button
+            className={"screen-nav-btn" + (screen === "pomodoro" ? " active" : "")}
+            onClick={() => setScreen("pomodoro")}
+          >
+            Pomodoro
           </button>
         </nav>
         <div style={{ justifySelf: "end", display: "flex", alignItems: "center", gap: "16px" }}>
@@ -850,59 +836,6 @@ export default function Dashboard({
 
             <div className="card">
               <div className="card-head">
-                <div className="card-title">Pomodoro</div>
-                <span className="tag rose"><span className="num">3</span> Done</span>
-              </div>
-              <div className="pomo">
-                <div className="pomo-ring">
-                  <svg width="178" height="178">
-                    <circle cx="89" cy="89" r="82" fill="none" stroke="oklch(var(--tint) / 0.08)" strokeWidth="2.5" />
-                    <circle
-                      cx="89" cy="89" r="82" fill="none" stroke="var(--sage)" strokeWidth="2.5"
-                      strokeLinecap="round" strokeDasharray={CIRC} strokeDashoffset={pomoOffset}
-                    />
-                  </svg>
-                  <div className="pomo-c">
-                    <div>
-                      <div className="mode">Focus</div>
-                      <div className="ptime num">{pomoTime}</div>
-                    </div>
-                  </div>
-                </div>
-                {pomoTaskChosen && pomoTaskIdx !== null && tasks[pomoTaskIdx] && (
-                  <div className="pomo-active-task">{tasks[pomoTaskIdx].name}</div>
-                )}
-                <div className="pomo-ctrl">
-                  <div className="pomo-btn-wrap">
-                    {!pomoTaskChosen ? (
-                      <button className="pbtn-main" onClick={() => setPomoPickerOpen(true)}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-                          <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                        </svg>
-                        Select a task
-                      </button>
-                    ) : (
-                      <button className="pbtn-main" onClick={() => setRunning((r) => !r)}>
-                        {running ? <PauseIcon /> : <PlayIcon />}
-                        {running ? "Pause" : "Start"}
-                      </button>
-                    )}
-                  </div>
-                  <button className="pbtn-reset" aria-label="Reset" onClick={resetPomo}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 4v6h6" />
-                      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="pomo-dots">
-                  <i className="done" /><i className="done" /><i className="done" /><i />
-                </div>
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-head">
                 <div className="card-title">Activity</div>
                 <span className="tag plain"><b style={{ color: "var(--ink-2)", fontWeight: 600 }} className="num">428</b> this quarter</span>
               </div>
@@ -1162,6 +1095,83 @@ export default function Dashboard({
             ))}
           </div>
         </div>
+      )}
+
+      {screen === "pomodoro" && (
+        <>
+          {pomoPickerOpen && !pomoRunning && (
+            <div className="pomo-modal-backdrop" onClick={() => setPomoPickerOpen(false)}>
+              <div className="pomo-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="pomo-modal-title">Focus on a task</div>
+                <div className="pomo-modal-list">
+                  <button
+                    className={"pomo-picker-item" + (pomoTaskChosen && pomoTaskName === null ? " active" : "")}
+                    onClick={() => { setPomoTaskName(null); setPomoTaskChosen(true); setPomoPickerOpen(false); }}
+                  >
+                    No task
+                  </button>
+                  {tasks.filter((t) => !t.done).map((t) => (
+                    <button
+                      key={t.name}
+                      className={"pomo-picker-item" + (pomoTaskName === t.name ? " active" : "")}
+                      onClick={() => { setPomoTaskName(t.name); setPomoTaskChosen(true); setPomoPickerOpen(false); }}
+                    >
+                      {t.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="pomo-page">
+            <div className="pomo-page-body">
+              <div className="pomo-page-ring">
+                <svg width={POMO_SIZE} height={POMO_SIZE}>
+                  <circle cx={POMO_CX} cy={POMO_CX} r={POMO_R} fill="none" stroke="oklch(var(--tint) / 0.08)" strokeWidth="4" />
+                  <circle
+                    cx={POMO_CX} cy={POMO_CX} r={POMO_R} fill="none" stroke="var(--sage)" strokeWidth="4"
+                    strokeLinecap="round" strokeDasharray={POMO_CIRC} strokeDashoffset={pomoOffset}
+                    style={{ transform: "rotate(-90deg)", transformOrigin: "center" }}
+                  />
+                </svg>
+                <div className="pomo-page-center">
+                  <div className="pomo-page-time num">{pomoTime}</div>
+                  {pomoTaskChosen && pomoTaskName && (
+                    <div className="pomo-page-task-label">{pomoTaskName}</div>
+                  )}
+                </div>
+              </div>
+              <div className="pomo-page-ctrl">
+                <div className="pomo-btn-wrap" style={{ flex: 1 }}>
+                  {!pomoTaskChosen ? (
+                    <button className="pbtn-main pomo-page-btn" onClick={() => setPomoPickerOpen(true)}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                        <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                      </svg>
+                      Select a task
+                    </button>
+                  ) : (
+                    <button className="pbtn-main pomo-page-btn" onClick={() => setPomoRunning((r) => !r)}>
+                      {pomoRunning ? <PauseIcon /> : <PlayIcon />}
+                      {pomoRunning ? "Pause" : "Start"}
+                    </button>
+                  )}
+                </div>
+                <button className="pbtn-reset pomo-page-reset" aria-label="Reset" onClick={resetPomo}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 4v6h6" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                </button>
+              </div>
+              <div className="pomo-dots" style={{ marginTop: 32 }}>
+                {Array.from({ length: 4 }, (_, i) => (
+                  <i key={i} className={i < pomoSessions % 4 ? "done" : ""} style={{ width: 10, height: 10 }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
     </div>
