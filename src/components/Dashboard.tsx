@@ -13,6 +13,7 @@ import {
   type HabitRow,
 } from "@/lib/data/habits";
 import { addPomoSession, getPomoSessions } from "@/lib/data/pomoSessions";
+import { POMO_COOKIE, serializePomoState, type PomoState } from "@/lib/pomodoro";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -136,11 +137,13 @@ export default function Dashboard({
   microsoftConnected,
   googleConnected,
   initialHabits,
+  initialPomo,
 }: {
   email: string;
   microsoftConnected: boolean;
   googleConnected: boolean;
   initialHabits: Habit[];
+  initialPomo: PomoState;
 }) {
   /* ---------- screen ---------- */
   // Views are switched with the History API (shallow routing) rather than
@@ -467,17 +470,18 @@ export default function Dashboard({
   /* ---------- pomodoro ---------- */
   const POMO_R = 160;
   const POMO_CIRC = 2 * Math.PI * POMO_R;
-  const [pomoMinutes, setPomoMinutes] = useState(25);
+  const [pomoMinutes, setPomoMinutes] = useState(initialPomo.minutes);
   const [pomoSettingsOpen, setPomoSettingsOpen] = useState(false);
   const [pomoCustomInput, setPomoCustomInput] = useState("");
   const POMO_TOTAL = pomoMinutes * 60;
-  const [pomoRemain, setPomoRemain] = useState(POMO_TOTAL);
-  const [pomoRunning, setPomoRunning] = useState(false);
-  const [pomoTaskName, setPomoTaskName] = useState<string | null>(null);
-  const [pomoTaskChosen, setPomoTaskChosen] = useState(false);
+  const [pomoRemain, setPomoRemain] = useState(initialPomo.remain);
+  const [pomoRunning, setPomoRunning] = useState(initialPomo.running);
+  const [pomoTaskName, setPomoTaskName] = useState<string | null>(initialPomo.taskName);
+  const [pomoTaskChosen, setPomoTaskChosen] = useState(initialPomo.taskChosen);
   const [pomoPickerOpen, setPomoPickerOpen] = useState(false);
   const [pomoHistory, setPomoHistory] = useState<PomoSession[]>([]);
   const pomoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pomoMounted = useRef(false);
 
   useEffect(() => {
     getPomoSessions(14)
@@ -506,6 +510,23 @@ export default function Dashboard({
     }
     return () => { if (pomoTimerRef.current) clearInterval(pomoTimerRef.current); };
   }, [pomoRunning]);
+
+  // Persist the timer to a cookie on every change so the *server* can seed the
+  // initial render with it (see page.tsx / parsePomoState). Reading it server
+  // side means a refresh paints the continued time immediately instead of
+  // flashing the default 25:00 until the client hydrates. Skip the first run so
+  // we don't rewrite the cookie that just seeded this mount.
+  useEffect(() => {
+    if (!pomoMounted.current) { pomoMounted.current = true; return; }
+    const value = encodeURIComponent(serializePomoState({
+      minutes: pomoMinutes,
+      remain: pomoRemain,
+      running: pomoRunning,
+      taskName: pomoTaskName,
+      taskChosen: pomoTaskChosen,
+    }));
+    document.cookie = `${POMO_COOKIE}=${value}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
+  }, [pomoMinutes, pomoRemain, pomoRunning, pomoTaskName, pomoTaskChosen]);
 
   function resetPomo() {
     setPomoRunning(false);
