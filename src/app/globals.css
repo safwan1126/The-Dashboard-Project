@@ -486,6 +486,7 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
   transition: background 0.15s;
 }
 .pbtn-reset:hover { background: oklch(var(--tint) / 0.03); }
+.pbtn-reset:disabled { opacity: 0.35; cursor: not-allowed; }
 .pbtn-reset svg { width: 16px; height: 16px; }
 .pomo-dots { display: flex; gap: 7px; margin-top: 22px; }
 .pomo-dots i { width: 7px; height: 7px; border-radius: 50%; background: oklch(var(--tint) / 0.16); }
@@ -525,8 +526,8 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .pomo-page { display: flex; flex-direction: column; padding: 32px 48px 48px; }
 .pomo-page-body { display: flex; flex-direction: column; align-items: center; flex: 1; justify-content: center; gap: 0; }
 .pomo-page-task-label {
-  font-size: 15px; line-height: 1.4; color: var(--ink-3); margin-top: 40px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 18px; line-height: 1.4; color: var(--ink-3); margin-top: 40px;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
 }
 .pomo-page-ring { position: relative; margin-bottom: 40px; line-height: 0; }
 .pomo-page-ring svg { display: block; }

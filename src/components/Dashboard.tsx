@@ -1151,23 +1151,32 @@ export default function Dashboard({
                       Select a task
                     </button>
                   ) : (
-                    <button className="pbtn-main pomo-page-btn" onClick={() => setPomoRunning((r) => !r)}>
+                    <button className="pbtn-main pomo-page-btn" onClick={() => {
+                      if (pomoRemain === 0) { setPomoRemain(POMO_TOTAL); setPomoRunning(true); }
+                      else { setPomoRunning((r) => !r); }
+                    }}>
                       {pomoRunning ? <PauseIcon /> : <PlayIcon />}
-                      {pomoRunning ? "Pause" : "Start"}
+                      {pomoRunning ? "Pause" : (pomoRemain === POMO_TOTAL || pomoRemain === 0) ? "Start" : "Resume"}
                     </button>
                   )}
                 </div>
-                <button className="pbtn-reset pomo-page-reset" aria-label="Reset" onClick={resetPomo}>
+                <button className="pbtn-reset pomo-page-reset" aria-label="Skip to end" title="Skip to end" disabled={pomoRemain === POMO_TOTAL || pomoRemain === 0} onClick={() => {
+                  if (pomoTimerRef.current) clearInterval(pomoTimerRef.current);
+                  setPomoRunning(false);
+                  setPomoRemain(0);
+                  setPomoSessions((s) => s + 1);
+                }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="5 4 15 12 5 20 5 4" />
+                    <line x1="19" y1="5" x2="19" y2="19" />
+                  </svg>
+                </button>
+                <button className="pbtn-reset pomo-page-reset" aria-label="Reset" disabled={pomoRemain === POMO_TOTAL} onClick={resetPomo}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M1 4v6h6" />
                     <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
                   </svg>
                 </button>
-              </div>
-              <div className="pomo-dots" style={{ marginTop: 32 }}>
-                {Array.from({ length: 4 }, (_, i) => (
-                  <i key={i} className={i < pomoSessions % 4 ? "done" : ""} style={{ width: 10, height: 10 }} />
-                ))}
               </div>
             </div>
           </div>
