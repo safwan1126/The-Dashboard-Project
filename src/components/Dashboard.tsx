@@ -13,7 +13,7 @@ import {
   type HabitRow,
 } from "@/lib/data/habits";
 import { addPomoSession, getPomoSessions } from "@/lib/data/pomoSessions";
-import { POMO_COOKIE, serializePomoState, type PomoState } from "@/lib/pomodoro";
+import { POMO_COOKIE, serializePomoState, type PomoState, type PomoPhase } from "@/lib/pomodoro";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -494,9 +494,12 @@ export default function Dashboard({
   const POMO_R = 160;
   const POMO_CIRC = 2 * Math.PI * POMO_R;
   const [pomoMinutes, setPomoMinutes] = useState(initialPomo.minutes);
+  const [pomoBreakMinutes, setPomoBreakMinutes] = useState(initialPomo.breakMinutes);
+  const [pomoPhase, setPomoPhase] = useState<PomoPhase>(initialPomo.phase);
   const [pomoSettingsOpen, setPomoSettingsOpen] = useState(false);
   const [pomoCustomInput, setPomoCustomInput] = useState("");
-  const POMO_TOTAL = pomoMinutes * 60;
+  const [pomoBreakCustomInput, setPomoBreakCustomInput] = useState("");
+  const POMO_TOTAL = (pomoPhase === "break" ? pomoBreakMinutes : pomoMinutes) * 60;
   const [pomoRemain, setPomoRemain] = useState(initialPomo.remain);
   const [pomoRunning, setPomoRunning] = useState(initialPomo.running);
   const [pomoTaskName, setPomoTaskName] = useState<string | null>(initialPomo.taskName);
@@ -520,19 +523,26 @@ export default function Dashboard({
   useEffect(() => {
     if (pomoRunning) {
       pomoTimerRef.current = setInterval(() => {
+        setPomoRemain((r) => (r > 1 ? r - 1 : 0));
         setPomoRemain((r) => {
-          if (r > 1) return r - 1;
+          if (r !== 0) return r;
           if (pomoTimerRef.current) clearInterval(pomoTimerRef.current);
+          if (pomoPhase === "focus") {
+            recordPomoSession(pomoTaskName, Date.now(), POMO_TOTAL);
+            setPomoPhase("break");
+            // pomoRunning stays true: the break timer starts automatically.
+            return pomoBreakMinutes * 60;
+          }
           setPomoRunning(false);
-          recordPomoSession(pomoTaskName, Date.now(), POMO_TOTAL);
-          return 0;
+          setPomoPhase("focus");
+          return pomoMinutes * 60;
         });
       }, 1000);
     } else if (pomoTimerRef.current) {
       clearInterval(pomoTimerRef.current);
     }
     return () => { if (pomoTimerRef.current) clearInterval(pomoTimerRef.current); };
-  }, [pomoRunning]);
+  }, [pomoRunning, pomoPhase]);
 
   // Persist the timer to a cookie on every change so the *server* can seed the
   // initial render with it (see page.tsx / parsePomoState). Reading it server
@@ -543,17 +553,34 @@ export default function Dashboard({
     if (!pomoMounted.current) { pomoMounted.current = true; return; }
     const value = encodeURIComponent(serializePomoState({
       minutes: pomoMinutes,
+      breakMinutes: pomoBreakMinutes,
+      phase: pomoPhase,
       remain: pomoRemain,
       running: pomoRunning,
       taskName: pomoTaskName,
       taskChosen: pomoTaskChosen,
     }));
     document.cookie = `${POMO_COOKIE}=${value}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
-  }, [pomoMinutes, pomoRemain, pomoRunning, pomoTaskName, pomoTaskChosen]);
+  }, [pomoMinutes, pomoBreakMinutes, pomoPhase, pomoRemain, pomoRunning, pomoTaskName, pomoTaskChosen]);
+
+  function completeCurrentPhase() {
+    if (pomoTimerRef.current) clearInterval(pomoTimerRef.current);
+    if (pomoPhase === "focus") {
+      recordPomoSession(pomoTaskName, Date.now(), POMO_TOTAL - pomoRemain);
+      setPomoPhase("break");
+      setPomoRemain(pomoBreakMinutes * 60);
+      setPomoRunning(true);
+    } else {
+      setPomoRunning(false);
+      setPomoPhase("focus");
+      setPomoRemain(pomoMinutes * 60);
+    }
+  }
 
   function resetPomo() {
     setPomoRunning(false);
-    setPomoRemain(POMO_TOTAL);
+    setPomoPhase("focus");
+    setPomoRemain(pomoMinutes * 60);
     setPomoTaskName(null);
     setPomoTaskChosen(false);
     setPomoPickerOpen(false);
@@ -561,12 +588,22 @@ export default function Dashboard({
 
   function applyPomoMinutes(mins: number) {
     setPomoMinutes(mins);
+    setPomoPhase("focus");
     setPomoRemain(mins * 60);
     setPomoRunning(false);
     setPomoTaskName(null);
     setPomoTaskChosen(false);
     setPomoSettingsOpen(false);
     setPomoCustomInput("");
+  }
+
+  function applyPomoBreakMinutes(mins: number) {
+    setPomoBreakMinutes(mins);
+    if (pomoPhase === "break") {
+      setPomoRemain(mins * 60);
+      setPomoRunning(false);
+    }
+    setPomoBreakCustomInput("");
   }
 
   const pomoTime = `${pad(Math.floor(pomoRemain / 60))}:${pad(pomoRemain % 60)}`;
@@ -1245,15 +1282,17 @@ export default function Dashboard({
                   />
                 </svg>
                 <div className="pomo-page-center">
+                  <div className="pomo-page-mode">{pomoPhase === "break" ? "Break" : "Focus"}</div>
                   <div className="pomo-page-time num">{pomoTime}</div>
-                  {pomoTaskChosen && pomoTaskName && (
+                  {pomoPhase === "focus" && pomoTaskChosen && pomoTaskName && (
                     <div className="pomo-page-task-label">{pomoTaskName}</div>
                   )}
                 </div>
               </div>
               {pomoSettingsOpen && (
                 <div className="pomo-settings">
-                  <div className="pomo-settings-label">Duration (minutes)</div>
+                  <div className="pomo-settings-group">
+                  <div className="pomo-settings-label"><span className="dot" />Focus duration (minutes)</div>
                   <div className="pomo-settings-presets">
                     {[5, 10, 15, 20, 25, 30, 45, 60].map(m => (
                       <button
@@ -1286,6 +1325,42 @@ export default function Dashboard({
                       Apply
                     </button>
                   </div>
+                  </div>
+                  <div className="pomo-settings-group rose">
+                  <div className="pomo-settings-label"><span className="dot" />Break duration (minutes)</div>
+                  <div className="pomo-settings-presets">
+                    {[5, 10, 15, 20, 30].map(m => (
+                      <button
+                        key={m}
+                        className={"pomo-settings-preset" + (pomoBreakMinutes === m && !pomoBreakCustomInput ? " active" : "")}
+                        onClick={() => applyPomoBreakMinutes(m)}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="pomo-settings-custom">
+                    <input
+                      className="pomo-settings-input"
+                      type="number" min="1" max="240" placeholder="Custom"
+                      value={pomoBreakCustomInput}
+                      onChange={e => setPomoBreakCustomInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") {
+                          const v = parseInt(pomoBreakCustomInput);
+                          if (v >= 1 && v <= 240) applyPomoBreakMinutes(v);
+                        }
+                      }}
+                    />
+                    <button
+                      className="pomo-settings-apply"
+                      disabled={!pomoBreakCustomInput || parseInt(pomoBreakCustomInput) < 1 || parseInt(pomoBreakCustomInput) > 240}
+                      onClick={() => { const v = parseInt(pomoBreakCustomInput); if (v >= 1 && v <= 240) applyPomoBreakMinutes(v); }}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  </div>
                 </div>
               )}
               <div className="pomo-page-ctrl">
@@ -1307,12 +1382,7 @@ export default function Dashboard({
                     </button>
                   )}
                 </div>
-                <button className="pbtn-reset pomo-page-reset" aria-label="Skip to end" title="Skip to end" disabled={pomoRemain === POMO_TOTAL || pomoRemain === 0} onClick={() => {
-                  if (pomoTimerRef.current) clearInterval(pomoTimerRef.current);
-                  setPomoRunning(false);
-                  recordPomoSession(pomoTaskName, Date.now(), POMO_TOTAL - pomoRemain);
-                  setPomoRemain(0);
-                }}>
+                <button className="pbtn-reset pomo-page-reset" aria-label="Skip to end" title="Skip to end" disabled={pomoRemain === POMO_TOTAL} onClick={completeCurrentPhase}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polygon points="5 4 15 12 5 20 5 4" />
                     <line x1="19" y1="5" x2="19" y2="19" />

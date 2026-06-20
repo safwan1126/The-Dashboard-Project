@@ -5,9 +5,14 @@
 
 export const POMO_COOKIE = "pomodoro";
 export const DEFAULT_POMO_MINUTES = 25;
+export const DEFAULT_BREAK_MINUTES = 5;
+
+export type PomoPhase = "focus" | "break";
 
 export type PomoState = {
   minutes: number;
+  breakMinutes: number;
+  phase: PomoPhase;
   remain: number;
   running: boolean;
   taskName: string | null;
@@ -16,6 +21,8 @@ export type PomoState = {
 
 type StoredPomo = {
   minutes?: number;
+  breakMinutes?: number;
+  phase?: PomoPhase;
   remain?: number;
   running?: boolean;
   taskName?: string | null;
@@ -28,6 +35,8 @@ type StoredPomo = {
 function defaultState(): PomoState {
   return {
     minutes: DEFAULT_POMO_MINUTES,
+    breakMinutes: DEFAULT_BREAK_MINUTES,
+    phase: "focus",
     remain: DEFAULT_POMO_MINUTES * 60,
     running: false,
     taskName: null,
@@ -56,10 +65,12 @@ export function parsePomoState(raw: string | undefined | null, now = Date.now())
   }
 
   const minutes = typeof s.minutes === "number" ? s.minutes : DEFAULT_POMO_MINUTES;
+  const breakMinutes = typeof s.breakMinutes === "number" ? s.breakMinutes : DEFAULT_BREAK_MINUTES;
+  const phase: PomoPhase = s.phase === "break" ? "break" : "focus";
   const taskChosen = !!s.taskChosen;
   const taskName = taskChosen ? (s.taskName ?? null) : null;
 
-  let remain = minutes * 60;
+  let remain = (phase === "break" ? breakMinutes : minutes) * 60;
   let running = false;
   if (s.running && typeof s.endsAt === "number") {
     const left = Math.round((s.endsAt - now) / 1000);
@@ -74,7 +85,7 @@ export function parsePomoState(raw: string | undefined | null, now = Date.now())
     remain = s.remain;
   }
 
-  return { minutes, remain, running, taskName, taskChosen };
+  return { minutes, breakMinutes, phase, remain, running, taskName, taskChosen };
 }
 
 // Serialize live state for the cookie, anchoring a running timer to an absolute
@@ -82,6 +93,8 @@ export function parsePomoState(raw: string | undefined | null, now = Date.now())
 export function serializePomoState(s: PomoState, now = Date.now()): string {
   const stored: StoredPomo = {
     minutes: s.minutes,
+    breakMinutes: s.breakMinutes,
+    phase: s.phase,
     remain: s.remain,
     running: s.running,
     taskName: s.taskName,
