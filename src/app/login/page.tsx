@@ -32,6 +32,9 @@ export default async function LoginPage({
         </form>
 
         <p className={styles.foot}>
+          <Link className={styles.link} href="/forgot-password">Forgot your password?</Link>
+        </p>
+        <p className={styles.foot}>
           New here?{" "}
           <Link className={styles.link} href="/signup">Create an account</Link>
         </p>

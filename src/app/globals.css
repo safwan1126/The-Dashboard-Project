@@ -800,6 +800,7 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .settings-section .settings-row:last-child { border-bottom: none; }
 .settings-row-label { font-size: 14.5px; font-weight: 600; color: var(--ink); }
 .settings-row-desc { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; max-width: 320px; }
+.settings-row-error { color: var(--rose); }
 .settings-row-control { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .settings-static-value { font-size: 13.5px; color: var(--ink-2); }
 

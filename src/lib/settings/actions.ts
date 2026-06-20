@@ -18,6 +18,16 @@ export async function updateProfileName(name: string): Promise<{ success: boolea
   return { success: true };
 }
 
+export async function changePassword(password: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false };
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
 export async function disconnectMicrosoft(): Promise<{ success: boolean }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

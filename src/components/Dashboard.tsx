@@ -14,7 +14,7 @@ import {
 } from "@/lib/data/habits";
 import { addPomoSession, getPomoSessions } from "@/lib/data/pomoSessions";
 import { POMO_COOKIE, serializePomoState, type PomoState, type PomoPhase } from "@/lib/pomodoro";
-import { updateProfileName, disconnectMicrosoft, disconnectGoogle } from "@/lib/settings/actions";
+import { updateProfileName, changePassword, disconnectMicrosoft, disconnectGoogle } from "@/lib/settings/actions";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -190,6 +190,9 @@ export default function Dashboard({
   const [profileName, setProfileName] = useState(initialName);
   const [nameDraft, setNameDraft] = useState(initialName);
   const [nameSaved, setNameSaved] = useState(false);
+  const [passwordDraft, setPasswordDraft] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSaved, setPasswordSaved] = useState(false);
   const displayName = profileName.trim() || nameFromEmail(email);
   const avatarInitials = initialsFrom(displayName);
 
@@ -201,6 +204,24 @@ export default function Dashboard({
       if (r.success) {
         setNameSaved(true);
         setTimeout(() => setNameSaved(false), 2000);
+      }
+    });
+  }
+
+  function savePassword() {
+    const trimmed = passwordDraft.trim();
+    if (trimmed.length < 6) {
+      setPasswordError("Password must be at least 6 characters");
+      return;
+    }
+    changePassword(trimmed).then((r) => {
+      if (r.success) {
+        setPasswordDraft("");
+        setPasswordError("");
+        setPasswordSaved(true);
+        setTimeout(() => setPasswordSaved(false), 2000);
+      } else {
+        setPasswordError(r.error || "Could not update password");
       }
     });
   }
@@ -1548,6 +1569,32 @@ export default function Dashboard({
               </div>
               <div className="settings-row-control">
                 <span className="settings-static-value">{email}</span>
+              </div>
+            </div>
+            <div className="settings-row">
+              <div>
+                <div className="settings-row-label">Password</div>
+                <div className="settings-row-desc">
+                  {passwordError ? <span className="settings-row-error">{passwordError}</span> : "Update the password used to sign in."}
+                </div>
+              </div>
+              <div className="settings-row-control">
+                <input
+                  className="settings-input"
+                  type="password"
+                  value={passwordDraft}
+                  onChange={(e) => { setPasswordDraft(e.target.value); setPasswordError(""); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") savePassword(); }}
+                  placeholder="New password"
+                  autoComplete="new-password"
+                />
+                <button
+                  className="settings-save-btn"
+                  disabled={!passwordDraft.trim()}
+                  onClick={savePassword}
+                >
+                  {passwordSaved ? "Saved" : "Save"}
+                </button>
               </div>
             </div>
           </div>
