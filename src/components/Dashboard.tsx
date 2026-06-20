@@ -232,6 +232,18 @@ export default function Dashboard({
     : "";
 
   /* ---------- tasks (shared between screens) ---------- */
+  // Microsoft To Do has no "pinned" concept, so the starred flag can't round-trip
+  // through the sync — it's tracked locally by task name instead.
+  const PINNED_KEY = "pinnedTaskNames";
+  function readPinned(): Set<string> {
+    try { return new Set(JSON.parse(localStorage.getItem(PINNED_KEY) || "[]")); } catch { return new Set(); }
+  }
+  function setPinned(name: string, starred: boolean) {
+    const pinned = readPinned();
+    if (starred) pinned.add(name); else pinned.delete(name);
+    localStorage.setItem(PINNED_KEY, JSON.stringify([...pinned]));
+  }
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -253,12 +265,18 @@ export default function Dashboard({
   }
 
   function toggleStar(i: number) {
-    setTasks((prev) => prev.map((t, idx) => (idx === i ? { ...t, starred: !t.starred } : t)));
+    setTasks((prev) => prev.map((t, idx) => {
+      if (idx !== i) return t;
+      const starred = !t.starred;
+      setPinned(t.name, starred);
+      return { ...t, starred };
+    }));
   }
 
   function deleteTask(i: number) {
     const task = tasks[i];
     setTasks((prev) => prev.filter((_, idx) => idx !== i));
+    setPinned(task.name, false);
     if (microsoftConnected && task.msId) deleteTaskFromMicrosoft(task.msId);
   }
 
@@ -266,7 +284,8 @@ export default function Dashboard({
     const trimmed = draft.trim();
     if (commit && trimmed) {
       const d = new Date();
-      setTasks((prev) => [...prev, { name: trimmed, time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, done: false, starred: false }]);
+      setPinned(trimmed, true);
+      setTasks((prev) => [...prev, { name: trimmed, time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, done: false, starred: true }]);
     }
     setAdding(false);
     setDraft("");
@@ -285,13 +304,14 @@ export default function Dashboard({
   // On mount, fetch tasks from Microsoft
   useEffect(() => {
     if (!microsoftConnected) return;
+    const pinned = readPinned();
     fetchMicrosoftTasks().then((remoteTasks) => {
       setTasks(remoteTasks.map((rt) => ({
         msId: rt.id,
         name: rt.name,
         time: "--:--",
         done: rt.done,
-        starred: false,
+        starred: pinned.has(rt.name),
       })));
       isFirstRender.current = false;
     });
