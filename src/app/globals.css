@@ -780,3 +780,58 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
   transition: background .16s, color .16s;
 }
 .habit-cancel:hover { background: oklch(var(--tint) / 0.025); color: var(--ink-2); }
+
+/* ============ SETTINGS SCREEN ============ */
+.settings-screen { max-width: 640px; margin: 0 auto; padding: 0 0 60px; }
+.settings-header { margin-bottom: 32px; }
+.settings-title { font-family: var(--serif); font-size: 32px; font-weight: 600;
+  letter-spacing: -0.02em; color: var(--ink); margin: 0 0 4px; }
+.settings-sub { font-size: 13px; color: var(--ink-3); margin: 0; }
+
+.settings-section { margin-bottom: 28px; }
+.settings-section-title {
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--ink-3); margin: 0 0 4px;
+}
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 16px 0; border-bottom: 1px solid var(--line);
+}
+.settings-section .settings-row:last-child { border-bottom: none; }
+.settings-row-label { font-size: 14.5px; font-weight: 600; color: var(--ink); }
+.settings-row-desc { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; max-width: 320px; }
+.settings-row-control { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.settings-static-value { font-size: 13.5px; color: var(--ink-2); }
+
+.settings-input {
+  padding: 7px 11px; border-radius: 8px; border: 1px solid var(--line);
+  background: transparent; color: var(--ink); font-size: 13.5px; font-family: var(--sans);
+  outline: none; width: 180px; transition: border-color 0.15s;
+}
+.settings-input:focus { border-color: var(--sage-soft); }
+.settings-save-btn {
+  padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--sage-faint); color: var(--sage-deep); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s; flex-shrink: 0;
+}
+.settings-save-btn:hover:not(:disabled) { background: var(--sage-soft); }
+.settings-save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.settings-switch {
+  width: 42px; height: 24px; border-radius: 999px; border: 1px solid var(--line);
+  background: oklch(var(--tint) / 0.06); padding: 2px; cursor: pointer;
+  display: flex; align-items: center; transition: background 0.15s, border-color 0.15s;
+}
+.settings-switch.on { background: var(--sage); border-color: var(--sage); }
+.settings-switch-knob {
+  width: 18px; height: 18px; border-radius: 50%; background: var(--card);
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.2); transition: transform 0.15s;
+}
+.settings-switch.on .settings-switch-knob { transform: translateX(18px); }
+
+.settings-disconnect-btn {
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
+  background: transparent; color: var(--ink-3); font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.settings-disconnect-btn:hover { background: var(--rose-faint); color: var(--rose); border-color: var(--rose-soft); }

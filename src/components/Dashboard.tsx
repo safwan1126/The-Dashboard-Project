@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { syncTasksToMicrosoft, deleteTaskFromMicrosoft } from "@/lib/microsoft/syncTasks";
 import { fetchMicrosoftTasks } from "@/lib/microsoft/fetchTasks";
 import { fetchDayEvents, type CalendarEvent } from "@/lib/google/fetchEvents";
@@ -14,6 +14,7 @@ import {
 } from "@/lib/data/habits";
 import { addPomoSession, getPomoSessions } from "@/lib/data/pomoSessions";
 import { POMO_COOKIE, serializePomoState, type PomoState, type PomoPhase } from "@/lib/pomodoro";
+import { updateProfileName, disconnectMicrosoft, disconnectGoogle } from "@/lib/settings/actions";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -169,9 +170,10 @@ export default function Dashboard({
   // router.push. Pushing a new route would refetch this dynamic page's server
   // payload on every tab click; pushState updates the URL — and useSearchParams,
   // which stays in sync — without any server round-trip.
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const screen = (searchParams.get("screen") ?? "home") as "home" | "tasks" | "habits" | "pomodoro";
-  function setScreen(s: "home" | "tasks" | "habits" | "pomodoro") {
+  const screen = (searchParams.get("screen") ?? "home") as "home" | "tasks" | "habits" | "pomodoro" | "settings";
+  function setScreen(s: "home" | "tasks" | "habits" | "pomodoro" | "settings") {
     const params = new URLSearchParams(searchParams.toString());
     if (s === "home") params.delete("screen");
     else params.set("screen", s);
@@ -185,8 +187,31 @@ export default function Dashboard({
   const isFirstRender = useRef(true);
 
   /* ---------- profile name ---------- */
-  const displayName = initialName.trim() || nameFromEmail(email);
+  const [profileName, setProfileName] = useState(initialName);
+  const [nameDraft, setNameDraft] = useState(initialName);
+  const [nameSaved, setNameSaved] = useState(false);
+  const displayName = profileName.trim() || nameFromEmail(email);
   const avatarInitials = initialsFrom(displayName);
+
+  function saveProfileName() {
+    const trimmed = nameDraft.trim();
+    if (trimmed === profileName.trim()) return;
+    setProfileName(trimmed);
+    updateProfileName(trimmed).then((r) => {
+      if (r.success) {
+        setNameSaved(true);
+        setTimeout(() => setNameSaved(false), 2000);
+      }
+    });
+  }
+
+  function handleDisconnectMicrosoft() {
+    disconnectMicrosoft().then((r) => { if (r.success) router.refresh(); });
+  }
+
+  function handleDisconnectGoogle() {
+    disconnectGoogle().then((r) => { if (r.success) router.refresh(); });
+  }
 
   /* ---------- dark mode ---------- */
   // Start at `false` to match server render (no hydration mismatch). The inline
@@ -670,32 +695,15 @@ export default function Dashboard({
         </nav>
         <div style={{ justifySelf: "end", display: "flex", alignItems: "center", gap: "16px" }}>
           <button
-            className={"dark-toggle" + (glass ? " active" : "")}
-            onClick={() => setGlass((g) => !g)}
-            aria-label="Toggle glass mode"
-            title={glass ? "Glass mode on" : "Glass mode off"}
+            className="dark-toggle"
+            onClick={() => setScreen("settings")}
+            aria-label="Settings"
+            title="Settings"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="3" />
-              <path d="M3 9h18M9 21V9" />
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
-          </button>
-          <button
-            className="dark-toggle"
-            onClick={() => setDarkMode((d) => !d)}
-            aria-label="Toggle dark mode"
-            title="Toggle dark mode"
-          >
-            {darkMode ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-              </svg>
-            )}
           </button>
           <div className="topclock num">{now ? `${clockStr}:${secStr}` : "--:--:--"}</div>
         </div>
@@ -1500,6 +1508,120 @@ export default function Dashboard({
             );
           })()}
         </>
+      )}
+
+      {screen === "settings" && (
+        <div className="settings-screen">
+          <div className="settings-header">
+            <h1 className="settings-title">Settings</h1>
+            <p className="settings-sub">Account, appearance, and connected services.</p>
+          </div>
+
+          <div className="settings-section">
+            <h2 className="settings-section-title">Account</h2>
+            <div className="settings-row">
+              <div>
+                <div className="settings-row-label">Name</div>
+                <div className="settings-row-desc">Shown on your profile and to-do widget.</div>
+              </div>
+              <div className="settings-row-control">
+                <input
+                  className="settings-input"
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveProfileName(); }}
+                  placeholder="Your name"
+                />
+                <button
+                  className="settings-save-btn"
+                  disabled={nameDraft.trim() === profileName.trim() || !nameDraft.trim()}
+                  onClick={saveProfileName}
+                >
+                  {nameSaved ? "Saved" : "Save"}
+                </button>
+              </div>
+            </div>
+            <div className="settings-row">
+              <div>
+                <div className="settings-row-label">Email</div>
+                <div className="settings-row-desc">Used to sign in — managed by your account provider.</div>
+              </div>
+              <div className="settings-row-control">
+                <span className="settings-static-value">{email}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <h2 className="settings-section-title">Appearance</h2>
+            <div className="settings-row">
+              <div>
+                <div className="settings-row-label">Dark mode</div>
+                <div className="settings-row-desc">Switch the whole dashboard to a darker palette.</div>
+              </div>
+              <div className="settings-row-control">
+                <button
+                  className={"settings-switch" + (darkMode ? " on" : "")}
+                  role="switch" aria-checked={darkMode}
+                  onClick={() => setDarkMode((d) => !d)}
+                >
+                  <span className="settings-switch-knob" />
+                </button>
+              </div>
+            </div>
+            <div className="settings-row">
+              <div>
+                <div className="settings-row-label">Glass mode</div>
+                <div className="settings-row-desc">Adds a frosted, translucent look to cards.</div>
+              </div>
+              <div className="settings-row-control">
+                <button
+                  className={"settings-switch" + (glass ? " on" : "")}
+                  role="switch" aria-checked={glass}
+                  onClick={() => setGlass((g) => !g)}
+                >
+                  <span className="settings-switch-knob" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <h2 className="settings-section-title">Integrations</h2>
+            <div className="settings-row">
+              <div>
+                <div className="settings-row-label">Microsoft To Do</div>
+                <div className="settings-row-desc">Powers the Tasks screen and home to-do widget.</div>
+              </div>
+              <div className="settings-row-control">
+                {microsoftConnected ? (
+                  <>
+                    <span className="ms-connect-btn connected" style={{ marginTop: 0 }}>Connected</span>
+                    <button className="settings-disconnect-btn" onClick={handleDisconnectMicrosoft}>Disconnect</button>
+                  </>
+                ) : (
+                  <a href="/auth/microsoft" className="ms-connect-btn" style={{ marginTop: 0 }}>Connect</a>
+                )}
+              </div>
+            </div>
+            <div className="settings-row">
+              <div>
+                <div className="settings-row-label">Google Calendar</div>
+                <div className="settings-row-desc">Powers the calendar widget on the home screen.</div>
+              </div>
+              <div className="settings-row-control">
+                {googleConnected ? (
+                  <>
+                    <span className="ms-connect-btn connected" style={{ marginTop: 0 }}>Connected</span>
+                    <button className="settings-disconnect-btn" onClick={handleDisconnectGoogle}>Disconnect</button>
+                  </>
+                ) : (
+                  <a href="/auth/google" className="ms-connect-btn" style={{ marginTop: 0 }}>Connect</a>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
