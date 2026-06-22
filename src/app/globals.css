@@ -629,6 +629,12 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
   font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-4); }
 .heat-legend .scale { display: flex; align-items: center; gap: 4px; }
 .heat-legend .scale i { width: 11px; height: 11px; border-radius: 3px; }
+.heat-nav { display: flex; align-items: center; gap: 8px; }
+.heat-nav button { width: 24px; height: 24px; border-radius: 7px; border: 1px solid var(--line);
+  background: transparent; color: var(--ink-2); cursor: pointer; display: grid; place-items: center;
+  font-size: 14px; line-height: 1; transition: background .15s, color .15s; }
+.heat-nav button:hover:not(:disabled) { background: oklch(var(--tint) / 0.03); }
+.heat-nav button:disabled { opacity: 0.3; cursor: default; }
 
 /* ============ RIGHT RAIL (unused) ============ */
 .rail {

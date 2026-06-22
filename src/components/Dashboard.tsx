@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { syncTasksToMicrosoft, deleteTaskFromMicrosoft } from "@/lib/microsoft/syncTasks";
 import { fetchMicrosoftTasks } from "@/lib/microsoft/fetchTasks";
@@ -12,7 +12,7 @@ import {
   toggleHabitToday as toggleHabitTodayAction,
   type HabitRow,
 } from "@/lib/data/habits";
-import { addPomoSession, getPomoSessions } from "@/lib/data/pomoSessions";
+import { addPomoSession, getPomoSessions, getAllPomoSessions } from "@/lib/data/pomoSessions";
 import { POMO_COOKIE, serializePomoState, type PomoState, type PomoPhase } from "@/lib/pomodoro";
 import { updateProfileName, changePassword, disconnectMicrosoft, disconnectGoogle } from "@/lib/settings/actions";
 
@@ -94,6 +94,19 @@ const SHADES = [
   "var(--sage)",
   "var(--sage-deep)",
 ];
+
+const HEAT_WEEKS = 15;
+const HEAT_DAYS = HEAT_WEEKS * 7; // one cell per day
+
+// Total focus minutes in a day -> shade level (0-4). Fixed thresholds keyed to
+// the timer's own presets: nothing / under 30m / 30-60m / 1-2h / 2h+.
+function focusLevel(minutes: number): number {
+  if (minutes <= 0) return 0;
+  if (minutes < 30) return 1;
+  if (minutes < 60) return 2;
+  if (minutes < 120) return 3;
+  return 4;
+}
 
 function CheckIcon() {
   return (
@@ -566,15 +579,64 @@ export default function Dashboard({
   const calStartHour = Math.min(7, ...timedEvents.map((e) => Math.floor(e.startMin / 60)));
   const calEndHour = Math.max(22, ...timedEvents.map((e) => Math.ceil(e.endMin / 60)));
 
-  /* ---------- heatmap (client-only random to avoid hydration mismatch) ---------- */
-  const [heat, setHeat] = useState<number[] | null>(null);
+  /* ---------- heatmap: daily focus time from pomodoro sessions ---------- */
+  // All-time focus minutes per local calendar day (keyed YYYY-MM-DD, matching
+  // the pomodoro timeline's grouping). Paging is then pure client-side math.
+  const [focusByDay, setFocusByDay] = useState<Map<string, number> | null>(null);
+  const [heatPage, setHeatPage] = useState(0); // 0 = current 15 weeks, 1 = previous, ...
   useEffect(() => {
-    setHeat(
-      Array.from({ length: 15 * 7 }, () =>
-        Math.random() < 0.3 ? 0 : 1 + Math.floor(Math.random() * 4)
-      )
-    );
+    getAllPomoSessions()
+      .then((rows) => {
+        const byDay = new Map<string, number>();
+        for (const r of rows) {
+          const d = new Date(r.completedAt);
+          const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+          byDay.set(key, (byDay.get(key) ?? 0) + r.duration / 60); // duration is seconds
+        }
+        setFocusByDay(byDay);
+      })
+      .catch(console.error);
   }, []);
+
+  // Build the visible 15-week window for the current page. The grid is
+  // column-major (CSS: grid-auto-flow column, 7 rows): column = week, row =
+  // weekday. The last column is `heatPage` windows before the current week, so
+  // on page 0 today sits at its weekday and later-this-week cells stay empty.
+  const { heat, heatTotalMin, heatRange, heatCanPrev } = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const lastColWeekStart = new Date(today);
+    lastColWeekStart.setDate(today.getDate() - today.getDay() - heatPage * HEAT_WEEKS * 7);
+
+    const keyOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const dateOfCell = (i: number) => {
+      const d = new Date(lastColWeekStart);
+      d.setDate(lastColWeekStart.getDate() + (Math.floor(i / 7) - (HEAT_WEEKS - 1)) * 7 + (i % 7));
+      return d;
+    };
+
+    if (!focusByDay) {
+      return { heat: null as number[] | null, heatTotalMin: 0, heatRange: "", heatCanPrev: false };
+    }
+
+    const levels: number[] = [];
+    let total = 0;
+    for (let i = 0; i < HEAT_DAYS; i++) {
+      const mins = focusByDay.get(keyOf(dateOfCell(i))) ?? 0;
+      total += mins;
+      levels.push(focusLevel(mins));
+    }
+
+    // Keys are zero-padded, so lexicographic order is chronological.
+    const startKey = keyOf(dateOfCell(0));
+    const canPrev = [...focusByDay.keys()].some((k) => k < startKey);
+
+    const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const endDate = heatPage === 0 ? today : dateOfCell(HEAT_DAYS - 1);
+    const range = `${fmt(dateOfCell(0))} – ${fmt(endDate)}`;
+
+    return { heat: levels, heatTotalMin: Math.round(total), heatRange: range, heatCanPrev: canPrev };
+  }, [focusByDay, heatPage]);
 
   /* ---------- pomodoro ---------- */
   const POMO_R = 160;
@@ -1065,15 +1127,19 @@ export default function Dashboard({
             <div className="card">
               <div className="card-head">
                 <div className="card-title">Activity</div>
-                <span className="tag plain"><b style={{ color: "var(--ink-2)", fontWeight: 600 }} className="num">428</b> this quarter</span>
+                <div className="heat-nav">
+                  <span className="tag plain"><b style={{ color: "var(--ink-2)", fontWeight: 600 }} className="num">{Math.round(heatTotalMin / 60)}</b> hrs</span>
+                  <button type="button" aria-label="Earlier weeks" disabled={!heatCanPrev} onClick={() => setHeatPage((p) => p + 1)}>‹</button>
+                  <button type="button" aria-label="Later weeks" disabled={heatPage === 0} onClick={() => setHeatPage((p) => Math.max(0, p - 1))}>›</button>
+                </div>
               </div>
               <div className="heat">
-                {(heat ?? Array.from({ length: 15 * 7 }, () => 0)).map((lvl, i) => (
+                {(heat ?? Array.from({ length: HEAT_DAYS }, () => 0)).map((lvl, i) => (
                   <div key={i} className="hc" style={{ background: SHADES[lvl] }} />
                 ))}
               </div>
               <div className="heat-legend">
-                <span>15 Weeks</span>
+                <span>{heatRange || "15 Weeks"}</span>
                 <div className="scale">
                   <span>Less</span>
                   {SHADES.map((s, i) => (
