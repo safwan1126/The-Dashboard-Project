@@ -654,6 +654,9 @@ export default function Dashboard({
   const [pomoTaskChosen, setPomoTaskChosen] = useState(initialPomo.taskChosen);
   const [pomoPickerOpen, setPomoPickerOpen] = useState(false);
   const [pomoHistory, setPomoHistory] = useState<PomoSession[]>([]);
+  const [pomoHistoryDays, setPomoHistoryDays] = useState(14);
+  const [pomoHistoryLoadingMore, setPomoHistoryLoadingMore] = useState(false);
+  const [pomoHistoryExhausted, setPomoHistoryExhausted] = useState(false);
   const pomoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pomoMounted = useRef(false);
   const pomoEndsAtRef = useRef<number | null>(null);
@@ -697,11 +700,27 @@ export default function Dashboard({
     localStorage.setItem("pomoAutoStart", String(pomoAutoStart));
   }, [pomoAutoStart]);
 
+  const pomoHistoryLenRef = useRef(0);
   useEffect(() => {
-    getPomoSessions(14)
-      .then(rows => setPomoHistory(rows.map(r => ({ task: r.taskName, completedAt: r.completedAt, duration: r.duration }))))
-      .catch(console.error);
-  }, []);
+    getPomoSessions(pomoHistoryDays)
+      .then(rows => {
+        const mapped = rows.map(r => ({ task: r.taskName, completedAt: r.completedAt, duration: r.duration }));
+        // Asking for a wider window came back with the same rows we already had,
+        // so there's nothing older left to page in.
+        if (pomoHistoryDays > 14 && mapped.length === pomoHistoryLenRef.current) {
+          setPomoHistoryExhausted(true);
+        }
+        pomoHistoryLenRef.current = mapped.length;
+        setPomoHistory(mapped);
+      })
+      .catch(console.error)
+      .finally(() => setPomoHistoryLoadingMore(false));
+  }, [pomoHistoryDays]);
+
+  function loadEarlierPomoSessions() {
+    setPomoHistoryLoadingMore(true);
+    setPomoHistoryDays((d) => d + 14);
+  }
 
   function recordPomoSession(task: string | null, completedAt: number, duration: number) {
     setPomoHistory(h => [...h, { task, completedAt, duration }]);
@@ -1658,6 +1677,28 @@ export default function Dashboard({
                       </span>
                     ))}
                   </div>
+                )}
+                {!pomoHistoryExhausted && (
+                  <button
+                    type="button"
+                    className="pomo-tl-load-more"
+                    onClick={loadEarlierPomoSessions}
+                    disabled={pomoHistoryLoadingMore}
+                  >
+                    <span className="pomo-tl-load-inner">
+                      <svg
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                        width="12" height="12"
+                        className={pomoHistoryLoadingMore ? "spin" : "pomo-tl-load-chevron"}
+                      >
+                        {pomoHistoryLoadingMore
+                          ? <path d="M21 12a9 9 0 1 1-6.2-8.5" />
+                          : <path d="M6 9l6 6 6-6" />}
+                      </svg>
+                      {pomoHistoryLoadingMore ? "Loading" : "Load earlier days"}
+                    </span>
+                  </button>
                 )}
               </div>
             );

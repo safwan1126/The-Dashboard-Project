@@ -566,6 +566,26 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .pomo-tl-block:hover::after { opacity: 1; }
 .pomo-tl-day { margin-bottom: 36px; }
 .pomo-tl-day:last-of-type { margin-bottom: 0; }
+.pomo-tl-load-more {
+  display: flex; align-items: center; gap: 16px; width: 100%;
+  margin: 32px auto 0; padding: 0; border: none; background: none;
+  cursor: pointer; font-family: var(--sans);
+}
+.pomo-tl-load-more::before,
+.pomo-tl-load-more::after {
+  content: ""; flex: 1; height: 1px; background: var(--line); transition: background 0.18s;
+}
+.pomo-tl-load-inner {
+  display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-4); transition: color 0.18s;
+}
+.pomo-tl-load-chevron { transition: transform 0.18s; }
+.pomo-tl-load-more:hover:not(:disabled) .pomo-tl-load-inner { color: var(--sage-deep); }
+.pomo-tl-load-more:hover:not(:disabled) .pomo-tl-load-chevron { transform: translateY(2px); }
+.pomo-tl-load-more:hover:not(:disabled)::before,
+.pomo-tl-load-more:hover:not(:disabled)::after { background: var(--sage-soft); }
+.pomo-tl-load-more:disabled { cursor: default; }
 .pomo-tl-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 28px; }
 .pomo-tl-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-3); }
 .pomo-tl-legend-item i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
