@@ -660,6 +660,43 @@ export default function Dashboard({
   const pomoRemainRef = useRef(pomoRemain);
   useEffect(() => { pomoRemainRef.current = pomoRemain; }, [pomoRemain]);
 
+  const [pomoNotify, setPomoNotify] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("pomoNotify") === "true";
+  });
+  useEffect(() => {
+    localStorage.setItem("pomoNotify", String(pomoNotify));
+  }, [pomoNotify]);
+
+  function togglePomoNotify() {
+    setPomoNotify((prev) => {
+      const next = !prev;
+      if (next && typeof Notification !== "undefined" && Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+      return next;
+    });
+  }
+
+  function notifyPomoComplete(finishedPhase: PomoPhase) {
+    if (!pomoNotify) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    new Notification(finishedPhase === "focus" ? "Focus session complete" : "Break complete", {
+      body: finishedPhase === "focus" ? "Time for a break." : "Time to get back to it.",
+    });
+  }
+
+  // Whether the next phase (break, or focus after a break) should start
+  // running automatically, or land paused waiting for the user to hit Start.
+  const [pomoAutoStart, setPomoAutoStart] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const v = localStorage.getItem("pomoAutoStart");
+    return v === null ? true : v === "true";
+  });
+  useEffect(() => {
+    localStorage.setItem("pomoAutoStart", String(pomoAutoStart));
+  }, [pomoAutoStart]);
+
   useEffect(() => {
     getPomoSessions(14)
       .then(rows => setPomoHistory(rows.map(r => ({ task: r.taskName, completedAt: r.completedAt, duration: r.duration }))))
@@ -687,16 +724,16 @@ export default function Dashboard({
           return;
         }
         if (pomoTimerRef.current) clearInterval(pomoTimerRef.current);
+        notifyPomoComplete(pomoPhase);
         if (pomoPhase === "focus") {
           recordPomoSession(pomoTaskName, Date.now(), POMO_TOTAL);
           setPomoPhase("break");
-          // pomoRunning stays true: the break timer starts automatically.
           setPomoRemain(pomoBreakMinutes * 60);
         } else {
-          setPomoRunning(false);
           setPomoPhase("focus");
           setPomoRemain(pomoMinutes * 60);
         }
+        setPomoRunning(pomoAutoStart);
       }, 1000);
     } else if (pomoTimerRef.current) {
       clearInterval(pomoTimerRef.current);
@@ -729,12 +766,11 @@ export default function Dashboard({
       recordPomoSession(pomoTaskName, Date.now(), POMO_TOTAL - pomoRemain);
       setPomoPhase("break");
       setPomoRemain(pomoBreakMinutes * 60);
-      setPomoRunning(true);
     } else {
-      setPomoRunning(false);
       setPomoPhase("focus");
       setPomoRemain(pomoMinutes * 60);
     }
+    setPomoRunning(pomoAutoStart);
   }
 
   function resetPomo() {
@@ -1776,6 +1812,40 @@ export default function Dashboard({
                   {calOffsetMin === 0 ? "0h" : `${calOffsetMin > 0 ? "+" : ""}${calOffsetMin / 60}h`}
                 </span>
                 <button className="settings-disconnect-btn" onClick={() => setCalOffsetMin((m) => m + 60)}>+1h</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <h2 className="settings-section-title">Pomodoro</h2>
+            <div className="settings-row">
+              <div>
+                <div className="settings-row-label">Notify when a timer ends</div>
+                <div className="settings-row-desc">Show a browser notification when a focus session or break finishes.</div>
+              </div>
+              <div className="settings-row-control">
+                <button
+                  className={"settings-switch" + (pomoNotify ? " on" : "")}
+                  role="switch" aria-checked={pomoNotify}
+                  onClick={togglePomoNotify}
+                >
+                  <span className="settings-switch-knob" />
+                </button>
+              </div>
+            </div>
+            <div className="settings-row">
+              <div>
+                <div className="settings-row-label">Auto-start next phase</div>
+                <div className="settings-row-desc">When a timer ends, automatically start the next phase instead of pausing.</div>
+              </div>
+              <div className="settings-row-control">
+                <button
+                  className={"settings-switch" + (pomoAutoStart ? " on" : "")}
+                  role="switch" aria-checked={pomoAutoStart}
+                  onClick={() => setPomoAutoStart((a) => !a)}
+                >
+                  <span className="settings-switch-knob" />
+                </button>
               </div>
             </div>
           </div>
