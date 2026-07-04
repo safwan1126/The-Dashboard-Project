@@ -1459,13 +1459,19 @@ export default function Dashboard({
                   >
                     No task
                   </button>
-                  {tasks.filter((t) => !t.done).map((t) => (
+                  {tasks
+                    .filter((t) => !t.done)
+                    .sort((a, b) => Number(b.starred) - Number(a.starred))
+                    .map((t) => (
                     <button
                       key={t.name}
                       className={"pomo-picker-item" + (pomoTaskName === t.name ? " active" : "")}
                       onClick={() => { setPomoTaskName(t.name); setPomoTaskChosen(true); setPomoPickerOpen(false); }}
                     >
-                      {t.name}
+                      <span className="pomo-picker-name">{t.name}</span>
+                      {t.starred && (
+                        <span className="pomo-picker-pin" title="Pinned to To-Do"><PinIcon /></span>
+                      )}
                     </button>
                   ))}
                 </div>

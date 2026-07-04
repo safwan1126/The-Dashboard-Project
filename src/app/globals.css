@@ -611,11 +611,13 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 }
 .pomo-modal-list { max-height: 320px; overflow-y: auto; padding-bottom: 8px; }
 .pomo-picker-item {
-  display: block; width: 100%; padding: 9px 13px; text-align: left;
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 13px; text-align: left;
   background: none; border: none; border-bottom: 1px solid oklch(var(--tint) / 0.08);
   color: var(--ink); font-size: 13px; font-family: inherit; cursor: pointer;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.pomo-picker-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pomo-picker-pin { display: flex; align-items: center; flex-shrink: 0; color: var(--sage-deep); }
+.pomo-picker-pin svg { width: 12px; height: 12px; }
 .pomo-picker-item:last-child { border-bottom: none; }
 .pomo-picker-item:hover { background: oklch(var(--tint) / 0.05); }
 .pomo-picker-item.active { color: var(--sage); font-weight: 600; }
