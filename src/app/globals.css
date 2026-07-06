@@ -325,7 +325,7 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .habits-score-bar i { display: block; height: 100%; background: var(--sage); border-radius: 999px; transition: width .3s; }
 
 .habits-grid {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+  display: grid; grid-template-columns: 1fr; gap: 10px;
 }
 .habit-card {
   display: flex; align-items: flex-start; gap: 10px;
@@ -352,10 +352,6 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
   font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink-3);
 }
 .habit-strk svg { width: 13px; height: 13px; }
-
-@media (max-width: 1500px) {
-  .habits-grid { grid-template-columns: 1fr; }
-}
 
 /* ============ CALENDAR ============ */
 .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }

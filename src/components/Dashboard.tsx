@@ -977,50 +977,6 @@ export default function Dashboard({
               <div className="bigdate">{dateStr}</div>
             </div>
 
-            <div className="card habits-card">
-              <div className="card-head">
-                <div className="card-title">Habits</div>
-                <span className="tag plain">{habitsDone}/{habitsToday.length} · {habitsPct}%</span>
-              </div>
-
-              <div className="habits-score">
-                <div className="habits-score-badge">{habitsDone}</div>
-                <div className="habits-score-mid">
-                  <div className="habits-score-label">Daily score · resets 00:00</div>
-                  <div className="habits-score-msg">
-                    {habitsDone === 0 ? "Start with one." : `${habitsDone} done — keep going.`}
-                  </div>
-                </div>
-                <div className="habits-score-bar">
-                  <i style={{ width: `${habitsPct}%` }} />
-                </div>
-              </div>
-
-              <div className="habits-grid">
-                {habits.map((hb) => {
-                  if (!(hb.frequency.length === 0 || hb.frequency.includes(todayDow))) return null;
-                  return (
-                    <div
-                      key={hb.id}
-                      className={"habit-card" + (hb.done ? " done" : "")}
-                      onClick={() => toggleHabit(hb.id)}
-                    >
-                      <span className="habit-check" />
-                      <div className="habit-info">
-                        <div className="habit-name">{hb.name}</div>
-                      </div>
-                      <div className="habit-strk">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-                        </svg>
-                        {hb.strk}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
             <div className="card">
               <div className="cal-head">
                 <div className="m">{calLabel}</div>
@@ -1134,48 +1090,47 @@ export default function Dashboard({
 
           {/* ===== RIGHT ===== */}
           <div className="col">
-            <div className="card">
+            <div className="card habits-card">
               <div className="card-head">
-                <div className="card-title">Nutrition</div>
-                <span className="tag">Today</span>
+                <div className="card-title">Habits</div>
+                <span className="tag plain">{habitsDone}/{habitsToday.length} · {habitsPct}%</span>
               </div>
-              <div className="nutri-top">
-                <div className="ring">
-                  <svg width="88" height="88">
-                    <circle cx="44" cy="44" r="39" fill="none" stroke="var(--sage-track)" strokeWidth="7" />
-                    <circle
-                      cx="44" cy="44" r="39" fill="none" stroke="var(--sage)" strokeWidth="7"
-                      strokeLinecap="round" strokeDasharray="245" strokeDashoffset="68.6"
-                    />
-                  </svg>
-                  <div className="ring-c"><b className="num">72</b></div>
+
+              <div className="habits-score">
+                <div className="habits-score-badge">{habitsDone}</div>
+                <div className="habits-score-mid">
+                  <div className="habits-score-label">Daily score · resets 00:00</div>
+                  <div className="habits-score-msg">
+                    {habitsDone === 0 ? "Start with one." : `${habitsDone} done — keep going.`}
+                  </div>
                 </div>
-                <div className="nutri-cal">
-                  <div className="big num">1,584</div>
-                  <div className="lbl"><b>/ 2,200</b> kcal consumed</div>
+                <div className="habits-score-bar">
+                  <i style={{ width: `${habitsPct}%` }} />
                 </div>
               </div>
-              <div className="macros">
-                <div>
-                  <div className="mline"><span className="mn">Protein</span><span className="mv num">98 / 130g</span></div>
-                  <div className="mbar"><i style={{ width: "75%", background: "var(--sage)" }} /></div>
-                </div>
-                <div>
-                  <div className="mline"><span className="mn">Carbs</span><span className="mv num">176 / 240g</span></div>
-                  <div className="mbar"><i style={{ width: "73%", background: "var(--rose)" }} /></div>
-                </div>
-                <div>
-                  <div className="mline"><span className="mn">Fat</span><span className="mv num">52 / 70g</span></div>
-                  <div className="mbar"><i style={{ width: "74%", background: "var(--sage-soft)" }} /></div>
-                </div>
-              </div>
-              <div className="water">
-                <div className="wtop"><span className="wn">Water</span><span className="wv num">6/8 glasses</span></div>
-                <div className="glasses">
-                  {Array.from({ length: 8 }, (_, i) => (
-                    <div key={i} className={"glass" + (i < 6 ? " full" : "")} />
-                  ))}
-                </div>
+
+              <div className="habits-grid">
+                {habits.map((hb) => {
+                  if (!(hb.frequency.length === 0 || hb.frequency.includes(todayDow))) return null;
+                  return (
+                    <div
+                      key={hb.id}
+                      className={"habit-card" + (hb.done ? " done" : "")}
+                      onClick={() => toggleHabit(hb.id)}
+                    >
+                      <span className="habit-check" />
+                      <div className="habit-info">
+                        <div className="habit-name">{hb.name}</div>
+                      </div>
+                      <div className="habit-strk">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                        </svg>
+                        {hb.strk}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
