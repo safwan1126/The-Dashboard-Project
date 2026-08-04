@@ -8,10 +8,17 @@ export type HabitRow = {
   strk: number;
   done: boolean;
   frequency: number[];
+  createdAt: string;
 };
+
+export type HabitCompletion = { habitId: string; date: string };
 
 function todayDate(): string {
   const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function toDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
@@ -35,7 +42,7 @@ export async function getHabits(userId?: string): Promise<HabitRow[]> {
   ] = await Promise.all([
     supabase
       .from("habits")
-      .select("id, name, strk, frequency")
+      .select("id, name, strk, frequency, created_at")
       .order("created_at", { ascending: true }),
     supabase
       .from("habit_completions")
@@ -54,7 +61,36 @@ export async function getHabits(userId?: string): Promise<HabitRow[]> {
     strk: h.strk,
     frequency: h.frequency ?? [],
     done: doneToday.has(h.id),
+    createdAt: toDateKey(new Date(h.created_at)),
   }));
+}
+
+// Fetches every completion in [startDate, endDate] (inclusive, "YYYY-MM-DD")
+// across all of the user's habits, for rendering the tracker table.
+export async function getHabitCompletionsRange(
+  startDate: string,
+  endDate: string,
+  userId?: string
+): Promise<HabitCompletion[]> {
+  const supabase = await createClient();
+  let uid = userId;
+  if (!uid) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+    uid = user.id;
+  }
+
+  const { data, error } = await supabase
+    .from("habit_completions")
+    .select("habit_id, date")
+    .eq("user_id", uid)
+    .gte("date", startDate)
+    .lte("date", endDate);
+  if (error) throw error;
+
+  return (data ?? []).map((c) => ({ habitId: c.habit_id, date: c.date }));
 }
 
 export async function addHabit(name: string, frequency: number[]): Promise<HabitRow> {
@@ -67,11 +103,11 @@ export async function addHabit(name: string, frequency: number[]): Promise<Habit
   const { data, error } = await supabase
     .from("habits")
     .insert({ user_id: user.id, name, frequency, strk: 0 })
-    .select("id, name, strk, frequency")
+    .select("id, name, strk, frequency, created_at")
     .single();
 
   if (error) throw error;
-  return { ...data, frequency: data.frequency ?? [], done: false };
+  return { ...data, frequency: data.frequency ?? [], done: false, createdAt: toDateKey(new Date(data.created_at)) };
 }
 
 export async function deleteHabit(id: string): Promise<void> {

@@ -11,6 +11,7 @@ import {
   updateHabitFrequency as updateHabitFrequencyAction,
   toggleHabitToday as toggleHabitTodayAction,
   type HabitRow,
+  type HabitCompletion,
 } from "@/lib/data/habits";
 import { addPomoSession, getPomoSessions, getAllPomoSessions } from "@/lib/data/pomoSessions";
 import { POMO_COOKIE, serializePomoState, type PomoState, type PomoPhase } from "@/lib/pomodoro";
@@ -18,6 +19,10 @@ import { updateProfileName, changePassword, disconnectMicrosoft, disconnectGoogl
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
+}
+
+function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 // Falls back to a readable name derived from the email for users who signed up
@@ -74,6 +79,15 @@ function formatHHMM(ms: number): string {
   const d = new Date(ms);
   const h = d.getHours(), m = d.getMinutes();
   return `${h % 12 || 12}:${pad(m)} ${h >= 12 ? "PM" : "AM"}`;
+}
+
+function formatDurationMin(totalMin: number): string {
+  const m = Math.max(0, Math.round(totalMin));
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  if (h === 0) return `${mm}m`;
+  if (mm === 0) return `${h}h`;
+  return `${h}h ${mm}m`;
 }
 
 function dayLabel(dateKey: string): string {
@@ -133,6 +147,25 @@ function PauseIcon() {
   );
 }
 
+function ClockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
+    </svg>
+  );
+}
+
+function TimerIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="10" y1="2" x2="14" y2="2" />
+      <line x1="12" y1="14" x2="12" y2="10" />
+      <circle cx="12" cy="14" r="8" />
+    </svg>
+  );
+}
+
 function PinIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: "rotate(45deg)" }}>
@@ -169,6 +202,7 @@ export default function Dashboard({
   microsoftConnected,
   googleConnected,
   initialHabits,
+  initialHabitCompletions,
   initialPomo,
 }: {
   email: string;
@@ -176,6 +210,7 @@ export default function Dashboard({
   microsoftConnected: boolean;
   googleConnected: boolean;
   initialHabits: Habit[];
+  initialHabitCompletions: HabitCompletion[];
   initialPomo: PomoState;
 }) {
   /* ---------- screen ---------- */
@@ -185,8 +220,8 @@ export default function Dashboard({
   // which stays in sync — without any server round-trip.
   const router = useRouter();
   const searchParams = useSearchParams();
-  const screen = (searchParams.get("screen") ?? "home") as "home" | "tasks" | "habits" | "pomodoro" | "settings";
-  function setScreen(s: "home" | "tasks" | "habits" | "pomodoro" | "settings") {
+  const screen = (searchParams.get("screen") ?? "home") as "home" | "tasks" | "habits" | "tracker" | "pomodoro" | "settings";
+  function setScreen(s: "home" | "tasks" | "habits" | "tracker" | "pomodoro" | "settings") {
     const params = new URLSearchParams(searchParams.toString());
     if (s === "home") params.delete("screen");
     else params.set("screen", s);
@@ -406,6 +441,9 @@ export default function Dashboard({
 
   /* ---------- habits ---------- */
   const [habits, setHabits] = useState<Habit[]>(initialHabits);
+  const [habitCompletions, setHabitCompletions] = useState<Set<string>>(
+    () => new Set(initialHabitCompletions.map((c) => `${c.habitId}|${c.date}`))
+  );
   function toggleHabit(id: string) {
     const h = habits.find((h) => h.id === id);
     if (!h) return;
@@ -413,6 +451,13 @@ export default function Dashboard({
     setHabits((prev) =>
       prev.map((x) => (x.id === id ? { ...x, done: nowDone, strk: x.strk + (nowDone ? 1 : -1) } : x))
     );
+    setHabitCompletions((prev) => {
+      const next = new Set(prev);
+      const key = `${id}|${dateKey(new Date())}`;
+      if (nowDone) next.add(key);
+      else next.delete(key);
+      return next;
+    });
     toggleHabitTodayAction(id, h.done, h.strk);
   }
   function deleteHabit(id: string) {
@@ -432,6 +477,27 @@ export default function Dashboard({
   const habitsToday = habits.filter((h) => h.frequency.length === 0 || h.frequency.includes(todayDow));
   const habitsDone = habitsToday.filter((h) => h.done).length;
   const habitsPct = habitsToday.length ? Math.round((habitsDone / habitsToday.length) * 100) : 0;
+
+  /* ---------- habit tracker table (last 30 days) ---------- */
+  const TRACKER_DAYS = 30;
+  const trackerToday = now ? dateKey(now) : null;
+  const trackerDays = useMemo(() => {
+    const days: { key: string; dow: number; dayNum: number; monthLabel: string | null; isToday: boolean }[] = [];
+    const cursor = new Date();
+    cursor.setHours(0, 0, 0, 0);
+    cursor.setDate(cursor.getDate() - (TRACKER_DAYS - 1));
+    for (let i = 0; i < TRACKER_DAYS; i++) {
+      days.push({
+        key: dateKey(cursor),
+        dow: cursor.getDay(),
+        dayNum: cursor.getDate(),
+        monthLabel: cursor.getDate() === 1 ? MONTHS[cursor.getMonth()].slice(0, 3) : null,
+        isToday: i === TRACKER_DAYS - 1,
+      });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return days;
+  }, [trackerToday]);
 
   /* ---------- habits screen: add habit ---------- */
   const [habitAdding, setHabitAdding] = useState(false);
@@ -540,6 +606,29 @@ export default function Dashboard({
 
     return () => { stale = true; };
   }, [googleConnected, calDateISO]);
+
+  /* ---------- "Up next" (Pomodoro screen): next Google Calendar event ---------- */
+  type UpNextEvent = CalendarEvent & { dayOffset: 0 | 1 };
+  const [upNextEvents, setUpNextEvents] = useState<UpNextEvent[] | null>(null);
+
+  useEffect(() => {
+    if (!googleConnected) return;
+    let stale = false;
+    (async () => {
+      const todayISO = isoOf(new Date());
+      const tomorrowISO = isoShift(todayISO, 1);
+      const [todayRes, tomorrowRes] = await Promise.all([
+        fetchDayEvents(todayISO),
+        fetchDayEvents(tomorrowISO),
+      ]);
+      if (stale) return;
+      setUpNextEvents([
+        ...(todayRes.status === "ok" ? todayRes.events.map((e) => ({ ...e, dayOffset: 0 as const })) : []),
+        ...(tomorrowRes.status === "ok" ? tomorrowRes.events.map((e) => ({ ...e, dayOffset: 1 as const })) : []),
+      ]);
+    })();
+    return () => { stale = true; };
+  }, [googleConnected, dateStr]);
 
   function shiftCalDay(delta: number) {
     setCalDate((prev) => {
@@ -826,6 +915,26 @@ export default function Dashboard({
   const POMO_SIZE = POMO_R * 2 + 20;
   const POMO_CX = POMO_SIZE / 2;
 
+  /* ---------- "Up next" widget: nearest upcoming (or in-progress) event ---------- */
+  const nowTotalSec = now ? now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() : 0;
+  const nextUpEvent = (() => {
+    if (!upNextEvents || !now) return null;
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    return upNextEvents
+      .filter((e) => !e.allDay)
+      .filter((e) => e.dayOffset === 1 || e.endMin > nowMin)
+      .sort((a, b) => (a.dayOffset - b.dayOffset) || (a.startMin - b.startMin))[0] ?? null;
+  })();
+  const nextUpStartSec = nextUpEvent ? nextUpEvent.dayOffset * 86400 + nextUpEvent.startMin * 60 : 0;
+  const nextUpEndSec = nextUpEvent ? nextUpEvent.dayOffset * 86400 + nextUpEvent.endMin * 60 : 0;
+  const nextUpInProgress = nextUpEvent ? nowTotalSec >= nextUpStartSec && nowTotalSec < nextUpEndSec : false;
+  const nextUpCountdownMin = nextUpEvent
+    ? Math.ceil(((nextUpInProgress ? nextUpEndSec : nextUpStartSec) - nowTotalSec) / 60)
+    : 0;
+  const nextUpProgressPct = nextUpInProgress
+    ? Math.min(100, Math.max(0, ((nowTotalSec - nextUpStartSec) / (nextUpEndSec - nextUpStartSec)) * 100))
+    : 0;
+
   return (
     <div className="stage">
       {/* ===== TOP BAR ===== */}
@@ -854,6 +963,13 @@ export default function Dashboard({
             onClick={() => setScreen("habits")}
           >
             Habits
+          </button>
+          <span className="screen-nav-sep">|</span>
+          <button
+            className={"screen-nav-btn" + (screen === "tracker" ? " active" : "")}
+            onClick={() => setScreen("tracker")}
+          >
+            Tracker
           </button>
           <span className="screen-nav-sep">|</span>
           <button
@@ -976,6 +1092,37 @@ export default function Dashboard({
               <div className="bigclock">{clockStr}<span className="sec">:{secStr}</span></div>
               <div className="bigdate">{dateStr}</div>
             </div>
+
+            {googleConnected && nextUpEvent && (
+              <div className="card">
+                <div className="card-head">
+                  <div className="card-title">Next Up</div>
+                  <span className="tag num">{nextUpInProgress ? "Now" : formatDurationMin(nextUpCountdownMin)}</span>
+                </div>
+                <div className="next-up-title">{nextUpEvent.title}</div>
+                <div className="next-up-meta">
+                  <span className="next-up-meta-item">
+                    <ClockIcon />
+                    {nextUpEvent.dayOffset === 1 ? "Tomorrow · " : ""}{nextUpEvent.start} → {nextUpEvent.end}
+                  </span>
+                  <span className="next-up-meta-sep" />
+                  <span className="next-up-meta-item">
+                    <TimerIcon />
+                    {formatDurationMin(nextUpEvent.endMin - nextUpEvent.startMin)}
+                  </span>
+                </div>
+                <div className="next-up-track">
+                  <div className="next-up-track-row">
+                    <span className="next-up-track-label num">Now {clockStr}</span>
+                    <span className="next-up-track-mid">
+                      {nextUpInProgress ? `Ends in ${formatDurationMin(nextUpCountdownMin)}` : `Starts in ${formatDurationMin(nextUpCountdownMin)}`}
+                    </span>
+                    <span className="next-up-track-label num">{nextUpEvent.end}</span>
+                  </div>
+                  <div className="bar next-up-track-bar"><i style={{ width: `${nextUpProgressPct}%` }} /></div>
+                </div>
+              </div>
+            )}
 
             <div className="card">
               <div className="cal-head">
@@ -1401,6 +1548,77 @@ export default function Dashboard({
         </div>
       )}
 
+      {screen === "tracker" && (
+        /* ===== HABIT TRACKER SCREEN ===== */
+        <div className="tracker-screen">
+          <div className="tasks-header">
+            <div>
+              <h1 className="tasks-title">Habit Tracker</h1>
+              <p className="tasks-sub">{habits.length} habits · last {TRACKER_DAYS} days</p>
+            </div>
+          </div>
+
+          <div className="tracker-table-wrap">
+            <table className="tracker-table">
+              <thead>
+                <tr>
+                  <th className="tracker-name-col" />
+                  {trackerDays.map((d) => (
+                    <th key={d.key} className={"tracker-th" + (d.isToday ? " today" : "")}>
+                      {DAY_LETTERS[d.dow]}
+                    </th>
+                  ))}
+                </tr>
+                <tr>
+                  <th className="tracker-name-col">Habit</th>
+                  {trackerDays.map((d) => (
+                    <th key={d.key} className={"tracker-th tracker-th-num" + (d.isToday ? " today" : "")}>
+                      {d.dayNum}
+                      {d.monthLabel && <span className="tracker-month-tag">{d.monthLabel}</span>}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {habits.map((hb) => (
+                  <tr key={hb.id}>
+                    <td className="tracker-name-col">{hb.name}</td>
+                    {trackerDays.map((d) => {
+                      const before = d.key < hb.createdAt;
+                      const done = habitCompletions.has(`${hb.id}|${d.key}`);
+                      const clickable = d.isToday && !before;
+                      return (
+                        <td
+                          key={d.key}
+                          className={
+                            "tracker-cell" +
+                            (before ? " before" : "") +
+                            (done ? " done" : "") +
+                            (d.isToday ? " today" : "") +
+                            (clickable ? " clickable" : "")
+                          }
+                          onClick={clickable ? () => toggleHabit(hb.id) : undefined}
+                          title={before ? "Not tracked yet" : d.key}
+                        >
+                          {!before && <span className="tracker-dot" />}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+                {habits.length === 0 && (
+                  <tr>
+                    <td className="tracker-empty" colSpan={TRACKER_DAYS + 1}>
+                      No habits yet — add one from the Habits tab.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {screen === "pomodoro" && (
         <>
           {pomoPickerOpen && !pomoRunning && (
@@ -1571,6 +1789,7 @@ export default function Dashboard({
               </div>
             </div>
           </div>
+
           {(() => {
             const TL_START = 6 * 3600;
             const TL_END = 24 * 3600;

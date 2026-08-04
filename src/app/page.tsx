@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import Dashboard from "@/components/Dashboard";
-import { getHabits } from "@/lib/data/habits";
+import { getHabits, getHabitCompletionsRange } from "@/lib/data/habits";
 import { POMO_COOKIE, parsePomoState } from "@/lib/pomodoro";
 
 export default async function Home() {
@@ -16,13 +16,20 @@ export default async function Home() {
     redirect("/login");
   }
 
-  // These three reads are independent — run them concurrently instead of
+  const trackerEnd = new Date();
+  const trackerStart = new Date(trackerEnd);
+  trackerStart.setDate(trackerStart.getDate() - 29);
+  const toDateKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  // These reads are independent — run them concurrently instead of
   // stacking their round-trips end-to-end.
-  const [{ data: tokenRow }, { data: googleTokenRow }, { data: profileRow }, habits, cookieStore] = await Promise.all([
+  const [{ data: tokenRow }, { data: googleTokenRow }, { data: profileRow }, habits, habitCompletions, cookieStore] = await Promise.all([
     supabase.from("microsoft_tokens").select("user_id").eq("user_id", user.id).single(),
     supabase.from("google_tokens").select("user_id").eq("user_id", user.id).single(),
     supabase.from("profiles").select("full_name").eq("id", user.id).single(),
     getHabits(user.id),
+    getHabitCompletionsRange(toDateKey(trackerStart), toDateKey(trackerEnd), user.id),
     cookies(),
   ]);
 
@@ -38,6 +45,7 @@ export default async function Home() {
         microsoftConnected={!!tokenRow}
         googleConnected={!!googleTokenRow}
         initialHabits={habits}
+        initialHabitCompletions={habitCompletions}
         initialPomo={initialPomo}
       />
     </Suspense>
