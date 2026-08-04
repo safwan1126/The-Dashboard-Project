@@ -122,8 +122,32 @@ export async function updateHabitFrequency(id: string, frequency: number[]): Pro
   if (error) throw error;
 }
 
-// Toggles today's completion for a habit and adjusts its streak.
-export async function toggleHabitToday(id: string, currentlyDone: boolean, currentStrk: number): Promise<number> {
+// Counts consecutive scheduled days, ending today (or yesterday if today is
+// scheduled but not yet completed), that have a completion recorded.
+function computeStreak(frequency: number[], completedDates: Set<string>): number {
+  if (frequency.length === 0) return 0;
+
+  const cursor = new Date();
+  cursor.setHours(0, 0, 0, 0);
+  if (frequency.includes(cursor.getDay()) && !completedDates.has(toDateKey(cursor))) {
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  let streak = 0;
+  // Bounded walk-back so a habit with no completions can't loop forever.
+  for (let i = 0; i < 3650; i++) {
+    if (frequency.includes(cursor.getDay())) {
+      if (!completedDates.has(toDateKey(cursor))) break;
+      streak++;
+    }
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+// Toggles today's completion for a habit and recomputes its streak from
+// actual completion history (so a missed scheduled day correctly resets it).
+export async function toggleHabitToday(id: string, currentlyDone: boolean): Promise<number> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -131,7 +155,6 @@ export async function toggleHabitToday(id: string, currentlyDone: boolean, curre
   if (!user) throw new Error("Not authenticated");
 
   const date = todayDate();
-  const newStrk = currentStrk + (currentlyDone ? -1 : 1);
 
   if (currentlyDone) {
     const { error } = await supabase
@@ -147,6 +170,15 @@ export async function toggleHabitToday(id: string, currentlyDone: boolean, curre
       .insert({ habit_id: id, user_id: user.id, date });
     if (error) throw error;
   }
+
+  const [{ data: habitRow, error: habitError }, { data: completions, error: compError }] = await Promise.all([
+    supabase.from("habits").select("frequency").eq("id", id).single(),
+    supabase.from("habit_completions").select("date").eq("habit_id", id).eq("user_id", user.id),
+  ]);
+  if (habitError) throw habitError;
+  if (compError) throw compError;
+
+  const newStrk = computeStreak(habitRow.frequency ?? [], new Set((completions ?? []).map((c) => c.date)));
 
   const { error: updateError } = await supabase.from("habits").update({ strk: newStrk }).eq("id", id);
   if (updateError) throw updateError;

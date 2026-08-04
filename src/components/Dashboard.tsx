@@ -52,7 +52,7 @@ const MONTHS = [
 type Task = { msId?: string; name: string; time: string; done: boolean; starred: boolean };
 
 /* ---------- habits ---------- */
-// frequency: days of week (0=Sun..6=Sat) the habit is scheduled on; empty = every day
+// frequency: days of week (0=Sun..6=Sat) the habit is scheduled on; empty = not scheduled on any day
 type Habit = HabitRow;
 
 const DAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -444,13 +444,11 @@ export default function Dashboard({
   const [habitCompletions, setHabitCompletions] = useState<Set<string>>(
     () => new Set(initialHabitCompletions.map((c) => `${c.habitId}|${c.date}`))
   );
-  function toggleHabit(id: string) {
+  async function toggleHabit(id: string) {
     const h = habits.find((h) => h.id === id);
     if (!h) return;
     const nowDone = !h.done;
-    setHabits((prev) =>
-      prev.map((x) => (x.id === id ? { ...x, done: nowDone, strk: x.strk + (nowDone ? 1 : -1) } : x))
-    );
+    setHabits((prev) => prev.map((x) => (x.id === id ? { ...x, done: nowDone } : x)));
     setHabitCompletions((prev) => {
       const next = new Set(prev);
       const key = `${id}|${dateKey(new Date())}`;
@@ -458,7 +456,8 @@ export default function Dashboard({
       else next.delete(key);
       return next;
     });
-    toggleHabitTodayAction(id, h.done, h.strk);
+    const newStrk = await toggleHabitTodayAction(id, h.done);
+    setHabits((prev) => prev.map((x) => (x.id === id ? { ...x, strk: newStrk } : x)));
   }
   function deleteHabit(id: string) {
     setHabits((prev) => prev.filter((h) => h.id !== id));
@@ -474,7 +473,7 @@ export default function Dashboard({
   }
 
   const todayDow = now ? now.getDay() : 0;
-  const habitsToday = habits.filter((h) => h.frequency.length === 0 || h.frequency.includes(todayDow));
+  const habitsToday = habits.filter((h) => h.frequency.includes(todayDow));
   const habitsDone = habitsToday.filter((h) => h.done).length;
   const habitsPct = habitsToday.length ? Math.round((habitsDone / habitsToday.length) * 100) : 0;
 
@@ -1258,7 +1257,7 @@ export default function Dashboard({
 
               <div className="habits-grid">
                 {habits.map((hb) => {
-                  if (!(hb.frequency.length === 0 || hb.frequency.includes(todayDow))) return null;
+                  if (!hb.frequency.includes(todayDow)) return null;
                   return (
                     <div
                       key={hb.id}
@@ -1527,7 +1526,7 @@ export default function Dashboard({
                       type="button"
                       className={"freq-day" + (hb.frequency.includes(d) ? " active" : "")}
                       onClick={() => toggleHabitFreqDay(hb.id, d)}
-                      title={hb.frequency.length === 0 ? "Every day (toggle a day to restrict)" : undefined}
+                      title={hb.frequency.length === 0 ? "Not scheduled on any day" : undefined}
                     >
                       {l}
                     </button>
