@@ -33,23 +33,6 @@ function dateKey(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-// Falls back to a readable name derived from the email for users who signed up
-// before the name field existed (drops purely-numeric segments, title-cases).
-function nameFromEmail(email: string): string {
-  const local = (email.split("@")[0] ?? "").trim();
-  if (!local) return "User";
-  const words = local.split(/[._-]+/).filter((w) => w && !/^\d+$/.test(w));
-  if (words.length === 0) return local;
-  return words.map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
-}
-
-function initialsFrom(displayName: string): string {
-  const parts = displayName.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -259,9 +242,6 @@ export default function Dashboard({
   const [passwordDraft, setPasswordDraft] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [passwordSaved, setPasswordSaved] = useState(false);
-  const displayName = profileName.trim() || nameFromEmail(email);
-  const avatarInitials = initialsFrom(displayName);
-
   function saveProfileName() {
     const trimmed = nameDraft.trim();
     if (trimmed === profileName.trim()) return;
@@ -1141,14 +1121,6 @@ export default function Dashboard({
         <div className="grid">
           {/* ===== LEFT ===== */}
           <div className="col">
-            <div className="card profile">
-              <div className="avatar">{avatarInitials}</div>
-              <div>
-                <h2>{displayName}</h2>
-                <div className="role">{email || "Product designer"}</div>
-              </div>
-            </div>
-
             <div className="card">
               <div className="card-head">
                 <div className="card-title">To-Do List</div>
