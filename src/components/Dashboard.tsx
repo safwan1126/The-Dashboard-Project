@@ -14,6 +14,14 @@ import {
   type HabitCompletion,
 } from "@/lib/data/habits";
 import { addPomoSession, getPomoSessions, getAllPomoSessions } from "@/lib/data/pomoSessions";
+import {
+  addNote as addNoteAction,
+  updateNoteBody as updateNoteBodyAction,
+  deleteNote as deleteNoteAction,
+  addNoteImages as addNoteImagesAction,
+  removeNoteImage as removeNoteImageAction,
+  type NoteRow,
+} from "@/lib/data/notes";
 import { POMO_COOKIE, serializePomoState, type PomoState, type PomoPhase } from "@/lib/pomodoro";
 import { updateProfileName, changePassword, disconnectMicrosoft, disconnectGoogle } from "@/lib/settings/actions";
 
@@ -196,6 +204,14 @@ function TrashIcon() {
   );
 }
 
+function PaperclipIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  );
+}
+
 export default function Dashboard({
   email,
   name: initialName,
@@ -203,6 +219,7 @@ export default function Dashboard({
   googleConnected,
   initialHabits,
   initialHabitCompletions,
+  initialNotes,
   initialPomo,
 }: {
   email: string;
@@ -211,6 +228,7 @@ export default function Dashboard({
   googleConnected: boolean;
   initialHabits: Habit[];
   initialHabitCompletions: HabitCompletion[];
+  initialNotes: NoteRow[];
   initialPomo: PomoState;
 }) {
   /* ---------- screen ---------- */
@@ -220,8 +238,8 @@ export default function Dashboard({
   // which stays in sync — without any server round-trip.
   const router = useRouter();
   const searchParams = useSearchParams();
-  const screen = (searchParams.get("screen") ?? "home") as "home" | "tasks" | "habits" | "tracker" | "pomodoro" | "settings";
-  function setScreen(s: "home" | "tasks" | "habits" | "tracker" | "pomodoro" | "settings") {
+  const screen = (searchParams.get("screen") ?? "home") as "home" | "tasks" | "habits" | "tracker" | "notes" | "pomodoro" | "settings";
+  function setScreen(s: "home" | "tasks" | "habits" | "tracker" | "notes" | "pomodoro" | "settings") {
     const params = new URLSearchParams(searchParams.toString());
     if (s === "home") params.delete("screen");
     else params.set("screen", s);
@@ -426,16 +444,134 @@ export default function Dashboard({
   const doneCount = starredTasks.filter((t) => t.done).length;
   const progressPct = starredTasks.length ? Math.round((doneCount / starredTasks.length) * 100) : 0;
 
-  /* ---------- quick note ---------- */
-  const [note, setNote] = useState(
-    "Ship the v2 dashboard before standup. Ping Dana re: the nutrition API quota — we're at 80% for June. Don't forget to water the monstera 🌱"
-  );
+  /* ---------- notes ---------- */
+  const [notes, setNotes] = useState<NoteRow[]>(initialNotes);
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(initialNotes[0]?.id ?? null);
   const [capture, setCapture] = useState("");
+  const [captureUploading, setCaptureUploading] = useState(false);
+  const [capturePreviews, setCapturePreviews] = useState<string[]>([]);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const captureRef = useRef<HTMLTextAreaElement>(null);
 
-  function onCaptureKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && capture.trim()) {
-      setNote(capture.trim());
-      setCapture("");
+  const activeNote = notes.find((n) => n.id === activeNoteId) ?? null;
+
+  // Auto-grow the capture box so long thoughts wrap onto new lines instead of
+  // scrolling sideways in a single-line field.
+  useEffect(() => {
+    const el = captureRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [capture]);
+
+  function formatNoteTimestamp(iso: string): string {
+    const d = new Date(iso);
+    return `${DAYS[d.getDay()].slice(0, 3)} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  // Creates a note from whatever's in the capture box (or blank) and makes it
+  // active. Used when an attachment arrives before any text has been entered.
+  async function ensureActiveNote(): Promise<string> {
+    if (activeNoteId) return activeNoteId;
+    const fd = new FormData();
+    fd.append("body", capture.trim());
+    const created = await addNoteAction(fd);
+    setNotes((prev) => [created, ...prev]);
+    setActiveNoteId(created.id);
+    setCapture("");
+    return created.id;
+  }
+
+  // Every Enter adds a new note rather than editing the last one — the
+  // capture box is a pure "add" affordance, and history lives on the Notes
+  // screen. The newly created note becomes active so a follow-up image
+  // attach (paperclip) lands on it.
+  function commitCapture() {
+    const text = capture.trim();
+    if (!text) return;
+    setCapture("");
+    const fd = new FormData();
+    fd.append("body", text);
+    addNoteAction(fd).then((created) => {
+      setNotes((prev) => [created, ...prev]);
+      setActiveNoteId(created.id);
+    });
+  }
+
+  function onCaptureKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      commitCapture();
+    }
+  }
+
+  async function attachImagesToNote(noteId: string, files: File[]): Promise<void> {
+    const fd = new FormData();
+    files.forEach((f) => fd.append("images", f));
+    const images = await addNoteImagesAction(noteId, fd);
+    setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, images: [...n.images, ...images] } : n)));
+  }
+
+  async function handleCaptureFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    const previewUrls = files.map((f) => URL.createObjectURL(f));
+    setCapturePreviews(previewUrls);
+    setCaptureUploading(true);
+    try {
+      const id = await ensureActiveNote();
+      await attachImagesToNote(id, files);
+    } catch (err) {
+      console.error("Failed to attach image", err);
+    } finally {
+      setCaptureUploading(false);
+      previewUrls.forEach((u) => URL.revokeObjectURL(u));
+      setCapturePreviews([]);
+    }
+  }
+
+  async function handleNewNoteCard() {
+    const fd = new FormData();
+    fd.append("body", "");
+    const created = await addNoteAction(fd);
+    setNotes((prev) => [created, ...prev]);
+    setEditingNoteId(created.id);
+    setEditDraft("");
+  }
+
+  function startEditingNote(n: NoteRow) {
+    setEditingNoteId(n.id);
+    setEditDraft(n.body);
+  }
+
+  function commitEditingNote() {
+    if (!editingNoteId) return;
+    const id = editingNoteId;
+    const text = editDraft;
+    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, body: text, updatedAt: new Date().toISOString() } : n)));
+    updateNoteBodyAction(id, text);
+    setEditingNoteId(null);
+  }
+
+  function handleDeleteNote(id: string) {
+    const remaining = notes.filter((n) => n.id !== id);
+    setNotes(remaining);
+    if (activeNoteId === id) setActiveNoteId(remaining[0]?.id ?? null);
+    deleteNoteAction(id);
+  }
+
+  function handleRemoveNoteImage(noteId: string, imageId: string) {
+    setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, images: n.images.filter((i) => i.id !== imageId) } : n)));
+    removeNoteImageAction(imageId).catch((err) => console.error("Failed to remove image", err));
+  }
+
+  async function handleCardFiles(noteId: string, fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    try {
+      await attachImagesToNote(noteId, Array.from(fileList));
+    } catch (err) {
+      console.error("Failed to attach image", err);
     }
   }
 
@@ -977,6 +1113,13 @@ export default function Dashboard({
           >
             Pomodoro
           </button>
+          <span className="screen-nav-sep">|</span>
+          <button
+            className={"screen-nav-btn" + (screen === "notes" ? " active" : "")}
+            onClick={() => setScreen("notes")}
+          >
+            Notes
+          </button>
         </nav>
         <div style={{ justifySelf: "end", display: "flex", alignItems: "center", gap: "16px" }}>
           <button
@@ -1071,16 +1214,42 @@ export default function Dashboard({
               <div className="card-head">
                 <span className="tag rose">Quick Note</span>
               </div>
-              <p className="note-body">{note}</p>
+              <p className="note-body">{activeNote?.body || "No notes yet — capture one below."}</p>
+              {(activeNote?.images.length || capturePreviews.length) ? (
+                <div className="note-card-images">
+                  {activeNote?.images.map((img) => (
+                    <div className="note-thumb-wrap" key={img.id}>
+                      <img src={img.url} alt="" className="note-thumb" />
+                    </div>
+                  ))}
+                  {capturePreviews.map((url) => (
+                    <div className="note-thumb-wrap" key={url}>
+                      <img src={url} alt="" className="note-thumb" />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               <div className="note-divider" />
               <div className="capture">
-                <input
-                  type="text"
+                <textarea
+                  ref={captureRef}
+                  rows={1}
                   placeholder="Capture a thought…"
                   value={capture}
                   onChange={(e) => setCapture(e.target.value)}
                   onKeyDown={onCaptureKeyDown}
                 />
+                <label className="capture-attach-btn" title="Attach image" aria-disabled={captureUploading}>
+                  <PaperclipIcon />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    hidden
+                    disabled={captureUploading}
+                    onChange={(e) => { handleCaptureFiles(e.target.files); e.target.value = ""; }}
+                  />
+                </label>
               </div>
             </div>
           </div>
@@ -1544,6 +1713,85 @@ export default function Dashboard({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {screen === "notes" && (
+        /* ===== NOTES SCREEN ===== */
+        <div className="tasks-screen">
+          <div className="tasks-header">
+            <div>
+              <h1 className="tasks-title">Notes</h1>
+              <p className="tasks-sub">{notes.length} note{notes.length === 1 ? "" : "s"}</p>
+            </div>
+            <button className="add-task tasks-add-btn" onClick={handleNewNoteCard}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              New note
+            </button>
+          </div>
+
+          {notes.length === 0 ? (
+            <p className="tasks-sub">No notes yet — capture one from the home screen or click &ldquo;New note&rdquo;.</p>
+          ) : (
+            <div className="notes-grid">
+              {notes.map((n) => (
+                <div key={n.id} className="card note-card">
+                  <div className="note-card-actions">
+                    <label className="capture-attach-btn" title="Add images">
+                      <PaperclipIcon />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        hidden
+                        onChange={(e) => { handleCardFiles(n.id, e.target.files); e.target.value = ""; }}
+                      />
+                    </label>
+                    <button className="tasks-delete" onClick={() => handleDeleteNote(n.id)} aria-label="Delete note">
+                      <TrashIcon />
+                    </button>
+                  </div>
+                  <div className="note-card-date">{formatNoteTimestamp(n.updatedAt)}</div>
+                  {editingNoteId === n.id ? (
+                    <textarea
+                      className="note-edit-textarea"
+                      autoFocus
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      onBlur={commitEditingNote}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEditingNote(); }
+                        if (e.key === "Escape") setEditingNoteId(null);
+                      }}
+                    />
+                  ) : (
+                    <p className="note-body" onClick={() => startEditingNote(n)}>
+                      {n.body || <span className="note-empty">Click to add text…</span>}
+                    </p>
+                  )}
+                  {n.images.length > 0 && (
+                    <div className="note-card-images">
+                      {n.images.map((img) => (
+                        <div className="note-thumb-wrap" key={img.id}>
+                          <img src={img.url} alt="" className="note-thumb" />
+                          <button
+                            type="button"
+                            className="note-thumb-remove"
+                            onClick={() => handleRemoveNoteImage(n.id, img.id)}
+                            aria-label="Remove image"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import Dashboard from "@/components/Dashboard";
 import { getHabits, getHabitCompletionsRange } from "@/lib/data/habits";
+import { getNotes } from "@/lib/data/notes";
 import { POMO_COOKIE, parsePomoState } from "@/lib/pomodoro";
 
 export default async function Home() {
@@ -24,12 +25,13 @@ export default async function Home() {
 
   // These reads are independent — run them concurrently instead of
   // stacking their round-trips end-to-end.
-  const [{ data: tokenRow }, { data: googleTokenRow }, { data: profileRow }, habits, habitCompletions, cookieStore] = await Promise.all([
+  const [{ data: tokenRow }, { data: googleTokenRow }, { data: profileRow }, habits, habitCompletions, notes, cookieStore] = await Promise.all([
     supabase.from("microsoft_tokens").select("user_id").eq("user_id", user.id).single(),
     supabase.from("google_tokens").select("user_id").eq("user_id", user.id).single(),
     supabase.from("profiles").select("full_name").eq("id", user.id).single(),
     getHabits(user.id),
     getHabitCompletionsRange(toDateKey(trackerStart), toDateKey(trackerEnd), user.id),
+    getNotes(user.id),
     cookies(),
   ]);
 
@@ -46,6 +48,7 @@ export default async function Home() {
         googleConnected={!!googleTokenRow}
         initialHabits={habits}
         initialHabitCompletions={habitCompletions}
+        initialNotes={notes}
         initialPomo={initialPomo}
       />
     </Suspense>
