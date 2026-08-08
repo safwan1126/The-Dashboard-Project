@@ -278,7 +278,7 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 
 
 /* ============ BIG CLOCK ============ */
-.clockblock { text-align: center; padding: 18px 0 6px; }
+.clockblock { text-align: center; padding: 0px 0 6px; }
 .bigclock { font-family: var(--serif); font-weight: 600; font-size: 76px; line-height: 1;
   letter-spacing: -0.01em; color: var(--ink); }
 .bigclock .sec { font-size: 30px; color: var(--ink-4); vertical-align: baseline; font-weight: 500; }
@@ -685,8 +685,13 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .pomo-page-reset svg { width: 20px; height: 20px; }
 
 /* ============ NEXT UP (home page, under the clock) ============ */
-.next-up-title { font-family: var(--serif); font-size: 18px; font-weight: 600; color: var(--ink); }
-.next-up-meta { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.next-up-head-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.next-up-head-divider { flex: 0 0 auto; width: 1px; height: 12px; background: var(--ink-4); }
+.next-up-title-inline {
+  font-family: var(--serif); font-size: 14.5px; font-weight: 600; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.next-up-meta { display: flex; align-items: center; gap: 12px; margin-top: 0; }
 .next-up-meta-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-3); }
 .next-up-meta-item svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--sage-deep); }
 .next-up-meta-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-4); }

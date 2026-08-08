@@ -1113,7 +1113,6 @@ export default function Dashboard({
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
           </button>
-          <div className="topclock num">{now ? `${clockStr}:${secStr}` : "--:--:--"}</div>
         </div>
       </header>
 
@@ -1236,10 +1235,13 @@ export default function Dashboard({
             {googleConnected && nextUpEvent && (
               <div className="card">
                 <div className="card-head">
-                  <div className="card-title">Next Up</div>
+                  <div className="next-up-head-left">
+                    <div className="card-title">Next Up</div>
+                    <span className="next-up-head-divider" />
+                    <span className="next-up-title-inline">{nextUpEvent.title}</span>
+                  </div>
                   <span className="tag num">{nextUpInProgress ? "Now" : formatDurationMin(nextUpCountdownMin)}</span>
                 </div>
-                <div className="next-up-title">{nextUpEvent.title}</div>
                 <div className="next-up-meta">
                   <span className="next-up-meta-item">
                     <ClockIcon />
