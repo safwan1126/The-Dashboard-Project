@@ -312,6 +312,9 @@ export default function Dashboard({
 
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
+    // Starts null so server and first client render match; real time is
+    // filled in here, client-only, to avoid a hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNow(new Date());
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
@@ -1150,7 +1153,7 @@ export default function Dashboard({
                 </>
               ) : (
                 <div className="todo-connect-prompt">
-                  <p className="todo-connect-msg">Connect Microsoft To Do to manage your tasks — they'll sync across all your devices.</p>
+                  <p className="todo-connect-msg">Connect Microsoft To Do to manage your tasks — they&apos;ll sync across all your devices.</p>
                   <a href="/auth/microsoft" className="ms-connect-btn">
                     <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                       <rect x="1" y="1" width="10" height="10" fill="#f25022"/>
