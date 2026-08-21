@@ -649,18 +649,11 @@ export default function Dashboard({
   const [calState, setCalState] = useState<"loading" | "ok" | "disconnected">(
     googleConnected ? "loading" : "disconnected"
   );
-  // Manual fix for accounts where Google's reported event times are off
-  // (seen with some users even though the server-side fetch/format logic is timezone-correct).
-  const [calOffsetMin, setCalOffsetMin] = useState<number>(() => {
-    if (typeof window === "undefined") return 0;
-    const v = Number(localStorage.getItem("calOffsetMin"));
-    return Number.isFinite(v) ? v : 0;
-  });
-  useEffect(() => {
-    localStorage.setItem("calOffsetMin", String(calOffsetMin));
-  }, [calOffsetMin]);
   const calCache = useRef(new Map<string, CalendarEvent[]>());
   const calFetching = useRef(new Set<string>());
+  // The viewer's actual IANA timezone, so event times are computed in the
+  // browser's zone rather than whatever zone the server process happens to run in.
+  const calTimeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
   function isoOf(d: Date) {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -677,7 +670,7 @@ export default function Dashboard({
     if (calFetching.current.has(iso)) return calCache.current.get(iso) ?? null;
     calFetching.current.add(iso);
     try {
-      const result = await fetchDayEvents(iso);
+      const result = await fetchDayEvents(iso, calTimeZone);
       if (result.status === "disconnected") {
         setCalState("disconnected");
         return null;
@@ -733,8 +726,8 @@ export default function Dashboard({
       const todayISO = isoOf(new Date());
       const tomorrowISO = isoShift(todayISO, 1);
       const [todayRes, tomorrowRes] = await Promise.all([
-        fetchDayEvents(todayISO),
-        fetchDayEvents(tomorrowISO),
+        fetchDayEvents(todayISO, calTimeZone),
+        fetchDayEvents(tomorrowISO, calTimeZone),
       ]);
       if (stale) return;
       setUpNextEvents([
@@ -768,18 +761,8 @@ export default function Dashboard({
 
   // Timeline window: 07:00–22:00, stretched if events fall outside it
   const CAL_PX_PER_MIN = 56 / 60;
-  const shiftedCalEvents = (calEvents ?? []).map((e) => {
-    if (e.allDay || calOffsetMin === 0) return e;
-    const startMin = e.startMin + calOffsetMin;
-    const endMin = e.endMin + calOffsetMin;
-    const toHHMM = (min: number) => {
-      const m = ((min % 1440) + 1440) % 1440;
-      return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
-    };
-    return { ...e, startMin, endMin, start: toHHMM(startMin), end: toHHMM(endMin) };
-  });
-  const timedEvents = shiftedCalEvents.filter((e) => !e.allDay);
-  const allDayEvents = shiftedCalEvents.filter((e) => e.allDay);
+  const timedEvents = (calEvents ?? []).filter((e) => !e.allDay);
+  const allDayEvents = (calEvents ?? []).filter((e) => e.allDay);
   const calStartHour = Math.min(7, ...timedEvents.map((e) => Math.floor(e.startMin / 60)));
   const calEndHour = Math.max(22, ...timedEvents.map((e) => Math.ceil(e.endMin / 60)));
 
@@ -2241,19 +2224,6 @@ export default function Dashboard({
                 ) : (
                   <a href="/auth/google" className="ms-connect-btn" style={{ marginTop: 0 }}>Connect</a>
                 )}
-              </div>
-            </div>
-            <div className="settings-row">
-              <div>
-                <div className="settings-row-label">Calendar time correction</div>
-                <div className="settings-row-desc">If your Google Calendar events show up at the wrong time, nudge this until they line up.</div>
-              </div>
-              <div className="settings-row-control">
-                <button className="settings-disconnect-btn" onClick={() => setCalOffsetMin((m) => m - 60)}>−1h</button>
-                <span className="num" style={{ minWidth: 36, textAlign: "center" }}>
-                  {calOffsetMin === 0 ? "0h" : `${calOffsetMin > 0 ? "+" : ""}${calOffsetMin / 60}h`}
-                </span>
-                <button className="settings-disconnect-btn" onClick={() => setCalOffsetMin((m) => m + 60)}>+1h</button>
               </div>
             </div>
           </div>
