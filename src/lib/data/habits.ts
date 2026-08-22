@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { computeStreak } from "@/lib/habitStreak";
 
 export type HabitRow = {
   id: string;
@@ -120,29 +121,6 @@ export async function updateHabitFrequency(id: string, frequency: number[]): Pro
   const supabase = await createClient();
   const { error } = await supabase.from("habits").update({ frequency }).eq("id", id);
   if (error) throw error;
-}
-
-// Counts consecutive scheduled days, ending today (or yesterday if today is
-// scheduled but not yet completed), that have a completion recorded.
-function computeStreak(frequency: number[], completedDates: Set<string>): number {
-  if (frequency.length === 0) return 0;
-
-  const cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
-  if (frequency.includes(cursor.getDay()) && !completedDates.has(toDateKey(cursor))) {
-    cursor.setDate(cursor.getDate() - 1);
-  }
-
-  let streak = 0;
-  // Bounded walk-back so a habit with no completions can't loop forever.
-  for (let i = 0; i < 3650; i++) {
-    if (frequency.includes(cursor.getDay())) {
-      if (!completedDates.has(toDateKey(cursor))) break;
-      streak++;
-    }
-    cursor.setDate(cursor.getDate() - 1);
-  }
-  return streak;
 }
 
 // Toggles today's completion for a habit and recomputes its streak from
