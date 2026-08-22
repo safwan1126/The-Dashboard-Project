@@ -2,9 +2,8 @@
 
 A personal dashboard — Next.js (App Router) + Supabase Auth, deployed on Vercel.
 
-This recreates the **Sage** design from `legacy-static/` (the original HTML/CSS/JS
-prototype is kept there for reference) as a real React app, gated behind
-Supabase email/password authentication.
+This recreates the **Sage** design — originally a plain HTML/CSS/JS prototype —
+as a real React app, gated behind Supabase email/password authentication.
 
 ## Stack
 

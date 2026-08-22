@@ -12,8 +12,6 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Old static prototype kept for reference only — not part of the app build.
-    "legacy-static/**",
   ]),
 ]);
 

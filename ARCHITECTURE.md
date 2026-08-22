@@ -46,9 +46,9 @@ widgets and a top-nav that switches between five views:
 | **Settings** | Account name, dark/glass appearance toggles, connect/disconnect integrations |
 
 The visual design (the "Sage" look — warm paper background, sage-green accents,
-serif headings) was first built as a plain HTML/CSS/JS prototype, which still
-lives in `legacy-static/` for reference. This repo is the **real React rewrite**
-of that prototype, with authentication and real data wired in.
+serif headings) was first built as a plain HTML/CSS/JS prototype. This repo is
+the **real React rewrite** of that prototype, with authentication and real
+data wired in.
 
 **Important nuance:** not every widget is "real" yet. Tasks, habits, the
 pomodoro timer, profile name, and the calendar are backed by real data
@@ -197,10 +197,6 @@ The Dashboard Project/
 ├─ tsconfig.json               # TS config; defines the @/* -> src/* path alias
 ├─ eslint.config.mjs           # Lint config (extends eslint-config-next)
 ├─ .env.local.example          # Template for required environment variables
-│
-├─ legacy-static/              # The original HTML/CSS/JS prototype (reference only,
-│  ├─ index.html               #   NOT part of the running app)
-│  └─ tweaks-panel.jsx
 │
 ├─ supabase/migrations/        # SQL files defining the database schema + security
 │  ├─ 0001_habits.sql
@@ -723,9 +719,9 @@ re-point the CSS variables:
 | `data-voice` | `Modern` / `Mono` | Alternate typography | ❌ defined in CSS, no UI |
 
 `data-accent` and `data-voice` are **vestigial** — they're carried over from the
-legacy prototype's "tweaks panel" (`legacy-static/tweaks-panel.jsx`) and still
-have full CSS support, but nothing in the current React app sets them. They're
-latent features waiting for a UI, not dead weight you need to fear.
+original prototype's "tweaks panel" and still have full CSS support, but
+nothing in the current React app sets them. They're latent features waiting
+for a UI, not dead weight you need to fear.
 
 ### The no-flash theme script (clever bit)
 
