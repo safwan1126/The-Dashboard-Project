@@ -1,13 +1,10 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+// Write side only. Mutations are what Server Actions are for; the reads live in
+// pomoSessionQueries.ts and are served by a Route Handler, since Server Actions
+// are queued and would serialise the dashboard's on-mount fetches.
 
-export type PomoSessionRow = {
-  id: string;
-  taskName: string | null;
-  completedAt: number;
-  duration: number;
-};
+import { createClient } from "@/lib/supabase/server";
 
 export async function addPomoSession(
   taskName: string | null,
@@ -26,51 +23,4 @@ export async function addPomoSession(
   });
 
   if (error) throw error;
-}
-
-export async function getPomoSessions(days = 14): Promise<PomoSessionRow[]> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const since = new Date();
-  since.setDate(since.getDate() - days + 1);
-  since.setHours(0, 0, 0, 0);
-
-  const { data, error } = await supabase
-    .from("pomo_sessions")
-    .select("id, task_name, completed_at, duration")
-    .gte("completed_at", since.toISOString())
-    .order("completed_at", { ascending: true });
-
-  if (error) { console.error("[getPomoSessions]", error); throw error; }
-
-  return (data ?? []).map(row => ({
-    id: row.id,
-    taskName: row.task_name,
-    completedAt: new Date(row.completed_at).getTime(),
-    duration: row.duration,
-  }));
-}
-
-// All of the user's sessions, newest first. Used by the activity heatmap, which
-// pages back through the full retained history rather than a fixed window.
-export async function getAllPomoSessions(): Promise<PomoSessionRow[]> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const { data, error } = await supabase
-    .from("pomo_sessions")
-    .select("id, task_name, completed_at, duration")
-    .order("completed_at", { ascending: false });
-
-  if (error) { console.error("[getAllPomoSessions]", error); throw error; }
-
-  return (data ?? []).map(row => ({
-    id: row.id,
-    taskName: row.task_name,
-    completedAt: new Date(row.completed_at).getTime(),
-    duration: row.duration,
-  }));
 }

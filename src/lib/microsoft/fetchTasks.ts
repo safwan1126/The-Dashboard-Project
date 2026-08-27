@@ -1,12 +1,11 @@
-"use server";
-
 import { getAccessToken } from "./getAccessToken";
+import type { RemoteTask } from "./types";
+
+export type { RemoteTask };
 
 type MsTask = { id: string; title: string; status: string };
 
 const LIST_NAME = "LifeOS";
-
-export type RemoteTask = { id: string; name: string; done: boolean };
 
 export async function fetchMicrosoftTasks(): Promise<RemoteTask[]> {
   const accessToken = await getAccessToken();

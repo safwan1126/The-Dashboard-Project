@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { syncTasksToMicrosoft, deleteTaskFromMicrosoft } from "@/lib/microsoft/syncTasks";
-import { fetchMicrosoftTasks } from "@/lib/microsoft/fetchTasks";
+import type { RemoteTask } from "@/lib/microsoft/types";
 import type { CalendarEvent, CalendarResult } from "@/lib/google/types";
+import type { PomoSessionRow } from "@/lib/data/pomoTypes";
 import {
   addHabit as addHabitAction,
   deleteHabit as deleteHabitAction,
@@ -13,7 +14,7 @@ import {
   type HabitRow,
   type HabitCompletion,
 } from "@/lib/data/habits";
-import { addPomoSession, getPomoSessions, getAllPomoSessions } from "@/lib/data/pomoSessions";
+import { addPomoSession } from "@/lib/data/pomoSessions";
 import {
   addNote as addNoteAction,
   updateNoteBody as updateNoteBodyAction,
@@ -27,6 +28,15 @@ import { updateProfileName, changePassword, disconnectMicrosoft, disconnectGoogl
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
+}
+
+// Reads go through Route Handlers rather than Server Actions. Server Actions
+// are queued and execute sequentially, so fetching data through them makes the
+// dashboard's on-mount requests wait on one another instead of running together.
+async function getJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} responded ${res.status}`);
+  return res.json();
 }
 
 function dateKey(d: Date): string {
@@ -400,16 +410,18 @@ export default function Dashboard({
   useEffect(() => {
     if (!microsoftConnected) return;
     const pinned = readPinned();
-    fetchMicrosoftTasks().then((remoteTasks) => {
-      setTasks(remoteTasks.map((rt) => ({
-        msId: rt.id,
-        name: rt.name,
-        time: "--:--",
-        done: rt.done,
-        starred: pinned.has(rt.name),
-      })));
-      isFirstRender.current = false;
-    });
+    getJson<RemoteTask[]>("/api/tasks")
+      .then((remoteTasks) => {
+        setTasks(remoteTasks.map((rt) => ({
+          msId: rt.id,
+          name: rt.name,
+          time: "--:--",
+          done: rt.done,
+          starred: pinned.has(rt.name),
+        })));
+        isFirstRender.current = false;
+      })
+      .catch(console.error);
   }, []);
 
   // Auto-sync to Microsoft on every task change (skip the initial fetch)
@@ -792,7 +804,7 @@ export default function Dashboard({
   const [focusByDay, setFocusByDay] = useState<Map<string, number> | null>(null);
   const [heatPage, setHeatPage] = useState(0); // 0 = current 15 weeks, 1 = previous, ...
   useEffect(() => {
-    getAllPomoSessions()
+    getJson<PomoSessionRow[]>("/api/pomo-sessions?all=1")
       .then((rows) => {
         const byDay = new Map<string, number>();
         for (const r of rows) {
@@ -909,7 +921,7 @@ export default function Dashboard({
 
   const pomoHistoryLenRef = useRef(0);
   useEffect(() => {
-    getPomoSessions(pomoHistoryDays)
+    getJson<PomoSessionRow[]>(`/api/pomo-sessions?days=${pomoHistoryDays}`)
       .then(rows => {
         const mapped = rows.map(r => ({ task: r.taskName, completedAt: r.completedAt, duration: r.duration }));
         // Asking for a wider window came back with the same rows we already had,
