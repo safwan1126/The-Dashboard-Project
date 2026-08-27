@@ -1,77 +1,38 @@
-"use server";
-
 import { getGoogleAccessToken } from "./getAccessToken";
+import { eventsForDay, zonedMidnightUtc, type GcalEvent } from "./mapEvents";
+import type { CalendarDays, CalendarEvent, CalendarResult } from "./types";
 
-type GcalEvent = {
-  id: string;
-  summary?: string;
-  start: { dateTime?: string; date?: string };
-  end: { dateTime?: string; date?: string };
-};
+export type { CalendarDays, CalendarEvent, CalendarResult };
 
-export type CalendarEvent = {
-  id: string;
-  title: string;
-  start: string; // "HH:MM", "" for all-day
-  end: string;
-  startMin: number; // minutes since midnight, for timeline positioning
-  endMin: number;
-  allDay: boolean;
-};
-
-export type CalendarResult =
-  | { status: "ok"; events: CalendarEvent[] }
-  | { status: "disconnected" };
-
-function pad(n: number) {
-  return String(n).padStart(2, "0");
-}
-
-// Wall-clock hour/minute for an absolute instant, as seen in `timeZone`.
-// Deliberately not `date.getHours()` — that reads the server process's own
-// timezone, which has no reason to match the viewer's.
-function zonedHourMinute(date: Date, timeZone: string) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hourCycle: "h23",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).formatToParts(date);
-  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
-  return { hour: get("hour"), minute: get("minute") };
-}
-
-// Midnight of `dateISO` ("YYYY-MM-DD") as an absolute instant in `timeZone`.
-function zonedMidnightUtc(dateISO: string, timeZone: string): Date {
-  const [y, m, d] = dateISO.split("-").map(Number);
-  const guess = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hourCycle: "h23",
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  }).formatToParts(guess);
-  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
-  const asIfUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
-  const offsetMs = asIfUtc - guess.getTime();
-  return new Date(guess.getTime() - offsetMs);
-}
-
-// dateISO: "YYYY-MM-DD" for the day to fetch, interpreted in `timeZone`
+// Fetch every requested day in a single Google Calendar call.
+//
+// The days need not be contiguous — one request spans the whole min..max range
+// and the results are bucketed per day afterwards. Asking for a day at a time
+// meant one OAuth exchange and one API round trip each, which is what made a
+// dashboard load slow.
+//
+// dateISOs: "YYYY-MM-DD" days to fetch, interpreted in `timeZone`
 // (the viewer's IANA timezone, e.g. "Europe/London") — not the server's own.
-export async function fetchDayEvents(dateISO: string, timeZone: string): Promise<CalendarResult> {
+export async function fetchDaysEvents(
+  dateISOs: string[],
+  timeZone: string
+): Promise<CalendarResult> {
+  const days = [...new Set(dateISOs)].sort();
+  if (days.length === 0) return { status: "ok", days: {} };
+
   const accessToken = await getGoogleAccessToken();
   if (!accessToken) return { status: "disconnected" };
 
-  const dayStart = zonedMidnightUtc(dateISO, timeZone);
-  const dayEnd = new Date(dayStart);
-  dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+  const rangeStart = zonedMidnightUtc(days[0], timeZone);
+  const rangeEnd = zonedMidnightUtc(days[days.length - 1], timeZone);
+  rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 1);
 
   const params = new URLSearchParams({
-    timeMin: dayStart.toISOString(),
-    timeMax: dayEnd.toISOString(),
+    timeMin: rangeStart.toISOString(),
+    timeMax: rangeEnd.toISOString(),
     singleEvents: "true",
     orderBy: "startTime",
+    maxResults: "2500",
   });
 
   const res = await fetch(
@@ -80,30 +41,15 @@ export async function fetchDayEvents(dateISO: string, timeZone: string): Promise
   );
 
   if (res.status === 401) return { status: "disconnected" };
-  if (!res.ok) return { status: "ok", events: [] };
+
+  const empty: CalendarDays = Object.fromEntries(days.map((iso) => [iso, []]));
+  if (!res.ok) return { status: "ok", days: empty };
 
   const data = await res.json();
+  const items: GcalEvent[] = data.items ?? [];
 
-  const events: CalendarEvent[] = (data.items ?? []).map((e: GcalEvent) => {
-    const allDay = !e.start.dateTime;
-    if (allDay) {
-      return { id: e.id, title: e.summary || "(untitled)", start: "", end: "", startMin: 0, endMin: 0, allDay };
-    }
-    // Clamp multi-day timed events to this day's window
-    const s = new Date(Math.max(new Date(e.start.dateTime!).getTime(), dayStart.getTime()));
-    const en = new Date(Math.min(new Date(e.end.dateTime!).getTime(), dayEnd.getTime()));
-    const sHM = zonedHourMinute(s, timeZone);
-    const enHM = zonedHourMinute(en, timeZone);
-    return {
-      id: e.id,
-      title: e.summary || "(untitled)",
-      start: `${pad(sHM.hour)}:${pad(sHM.minute)}`,
-      end: `${pad(enHM.hour)}:${pad(enHM.minute)}`,
-      startMin: sHM.hour * 60 + sHM.minute,
-      endMin: (enHM.hour * 60 + enHM.minute) || 24 * 60,
-      allDay,
-    };
-  });
+  const bucketed: CalendarDays = {};
+  for (const iso of days) bucketed[iso] = eventsForDay(items, iso, timeZone);
 
-  return { status: "ok", events };
+  return { status: "ok", days: bucketed };
 }

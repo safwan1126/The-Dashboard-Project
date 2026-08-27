@@ -41,7 +41,15 @@ export async function GET(request: Request) {
 
   const { error } = await supabase
     .from("google_tokens")
-    .upsert({ user_id: user.id, refresh_token: tokens.refresh_token, updated_at: new Date().toISOString() });
+    .upsert({
+      user_id: user.id,
+      refresh_token: tokens.refresh_token,
+      // Drop any cached access token — it may belong to the previously
+      // connected Google account.
+      access_token: null,
+      access_token_expires_at: null,
+      updated_at: new Date().toISOString(),
+    });
 
   if (error) {
     console.error("Failed to store Google token:", error);
