@@ -23,6 +23,7 @@ import {
   removeNoteImage as removeNoteImageAction,
   type NoteRow,
 } from "@/lib/data/notes";
+import { createSingleFlight } from "@/lib/singleFlight";
 import { POMO_COOKIE, serializePomoState, type PomoState, type PomoPhase } from "@/lib/pomodoro";
 import { updateProfileName, changePassword, disconnectMicrosoft, disconnectGoogle } from "@/lib/settings/actions";
 
@@ -665,7 +666,11 @@ export default function Dashboard({
     googleConnected ? "loading" : "disconnected"
   );
   const calCache = useRef(new Map<string, CalendarEvent[]>());
-  const calFetching = useRef(new Set<string>());
+  // Collapses duplicate batch requests, keyed by the day list. Callers share
+  // the pending promise rather than being turned away, so a second effect pass
+  // — React StrictMode remounts every effect in development — still receives
+  // the result instead of dropping it.
+  const calInFlight = useRef(createSingleFlight<boolean>());
   // The viewer's actual IANA timezone, so event times are computed in the
   // browser's zone rather than whatever zone the server process happens to run in.
   const calTimeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
@@ -718,29 +723,27 @@ export default function Dashboard({
   // Server Actions are queued and execute sequentially, so the previous
   // day-at-a-time version had a dozen requests waiting on each other — which is
   // what made "Up next", queued last, take several seconds to appear.
-  async function loadDays(isos: string[]): Promise<boolean> {
+  function loadDays(isos: string[]): Promise<boolean> {
     const key = isos.join(",");
-    if (calFetching.current.has(key)) return false;
-    calFetching.current.add(key);
-    try {
-      const res = await fetch(
-        `/api/calendar?days=${encodeURIComponent(key)}&tz=${encodeURIComponent(calTimeZone)}`
-      );
-      if (!res.ok) return false;
-      const result: CalendarResult = await res.json();
-      if (result.status === "disconnected") {
-        setCalState("disconnected");
+    return calInFlight.current(key, async () => {
+      try {
+        const res = await fetch(
+          `/api/calendar?days=${encodeURIComponent(key)}&tz=${encodeURIComponent(calTimeZone)}`
+        );
+        if (!res.ok) return false;
+        const result: CalendarResult = await res.json();
+        if (result.status === "disconnected") {
+          setCalState("disconnected");
+          return false;
+        }
+        for (const [iso, events] of Object.entries(result.days)) {
+          calCache.current.set(iso, events);
+        }
+        return true;
+      } catch {
         return false;
       }
-      for (const [iso, events] of Object.entries(result.days)) {
-        calCache.current.set(iso, events);
-      }
-      return true;
-    } catch {
-      return false;
-    } finally {
-      calFetching.current.delete(key);
-    }
+    });
   }
 
   useEffect(() => {
