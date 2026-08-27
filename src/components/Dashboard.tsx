@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { syncTasksToMicrosoft, deleteTaskFromMicrosoft } from "@/lib/microsoft/syncTasks";
 import { fetchMicrosoftTasks } from "@/lib/microsoft/fetchTasks";
-import { fetchDayEvents, type CalendarEvent } from "@/lib/google/fetchEvents";
+import type { CalendarEvent, CalendarResult } from "@/lib/google/types";
 import {
   addHabit as addHabitAction,
   deleteHabit as deleteHabitAction,
@@ -668,20 +668,66 @@ export default function Dashboard({
   }
   const calDateISO = isoOf(calDate);
 
-  // Fetch a day into the cache (deduped); returns the events or null if disconnected
-  async function loadDay(iso: string): Promise<CalendarEvent[] | null> {
-    if (calFetching.current.has(iso)) return calCache.current.get(iso) ?? null;
-    calFetching.current.add(iso);
+  /* ---------- "Up next" (Pomodoro screen): next Google Calendar event ---------- */
+  type UpNextEvent = CalendarEvent & { dayOffset: 0 | 1 };
+  const [upNextEvents, setUpNextEvents] = useState<UpNextEvent[] | null>(null);
+
+  // "Today" only matters at day granularity. Deriving it from the per-second
+  // clock tick would hand `daysToLoad` a new value every second and refire the
+  // calendar fetch with it, so it is held as state and only moved at midnight.
+  const [todayISO, setTodayISO] = useState(() => isoOf(new Date()));
+  useEffect(() => {
+    if (!now) return;
+    const current = isoOf(now);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (current !== todayISO) setTodayISO(current);
+  }, [now, todayISO]);
+
+  // Everything the dashboard needs on screen: the visible day, its neighbours,
+  // the whole visible week (for the strip and ‹ ›), and today + tomorrow (for
+  // "Up next"). Fetched as one request — see loadDays.
+  const daysToLoad = useMemo(() => {
+    const mondayOffset = -((new Date(`${calDateISO}T00:00:00`).getDay() + 6) % 7);
+    const wanted = new Set<string>([
+      calDateISO,
+      isoShift(calDateISO, -1),
+      isoShift(calDateISO, 1),
+      todayISO,
+      isoShift(todayISO, 1),
+    ]);
+    for (let i = 0; i < 7; i++) wanted.add(isoShift(calDateISO, mondayOffset + i));
+    return [...wanted].sort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calDateISO, todayISO]);
+
+  // Fetch a batch of days into the cache in one round trip (deduped by batch).
+  //
+  // This goes through a Route Handler rather than a Server Action on purpose:
+  // Server Actions are queued and execute sequentially, so the previous
+  // day-at-a-time version had a dozen requests waiting on each other — which is
+  // what made "Up next", queued last, take several seconds to appear.
+  async function loadDays(isos: string[]): Promise<boolean> {
+    const key = isos.join(",");
+    if (calFetching.current.has(key)) return false;
+    calFetching.current.add(key);
     try {
-      const result = await fetchDayEvents(iso, calTimeZone);
+      const res = await fetch(
+        `/api/calendar?days=${encodeURIComponent(key)}&tz=${encodeURIComponent(calTimeZone)}`
+      );
+      if (!res.ok) return false;
+      const result: CalendarResult = await res.json();
       if (result.status === "disconnected") {
         setCalState("disconnected");
-        return null;
+        return false;
       }
-      calCache.current.set(iso, result.events);
-      return result.events;
+      for (const [iso, events] of Object.entries(result.days)) {
+        calCache.current.set(iso, events);
+      }
+      return true;
+    } catch {
+      return false;
     } finally {
-      calFetching.current.delete(iso);
+      calFetching.current.delete(key);
     }
   }
 
@@ -694,52 +740,23 @@ export default function Dashboard({
       // Instant render from cache, then refresh quietly in the background
       setCalEvents(cached);
       setCalState("ok");
-      loadDay(calDateISO).then((events) => {
-        if (!stale && events) setCalEvents(events);
-      });
     } else {
       setCalState("loading");
-      loadDay(calDateISO).then((events) => {
-        if (stale || !events) return;
-        setCalEvents(events);
-        setCalState("ok");
-      });
     }
 
-    // Prefetch the whole visible week, the neighbours, and today,
-    // so the week strip, ‹ ›, and "Today" all feel instant
-    const mondayOffset = -((calDate.getDay() + 6) % 7);
-    const prefetch = new Set<string>([isoShift(calDateISO, -1), isoShift(calDateISO, 1), isoOf(new Date())]);
-    for (let i = 0; i < 7; i++) prefetch.add(isoShift(calDateISO, mondayOffset + i));
-    for (const iso of prefetch) {
-      if (iso !== calDateISO && !calCache.current.has(iso)) loadDay(iso);
-    }
-
-    return () => { stale = true; };
-  }, [googleConnected, calDateISO]);
-
-  /* ---------- "Up next" (Pomodoro screen): next Google Calendar event ---------- */
-  type UpNextEvent = CalendarEvent & { dayOffset: 0 | 1 };
-  const [upNextEvents, setUpNextEvents] = useState<UpNextEvent[] | null>(null);
-
-  useEffect(() => {
-    if (!googleConnected) return;
-    let stale = false;
-    (async () => {
-      const todayISO = isoOf(new Date());
-      const tomorrowISO = isoShift(todayISO, 1);
-      const [todayRes, tomorrowRes] = await Promise.all([
-        fetchDayEvents(todayISO, calTimeZone),
-        fetchDayEvents(tomorrowISO, calTimeZone),
-      ]);
-      if (stale) return;
+    loadDays(daysToLoad).then((ok) => {
+      if (stale || !ok) return;
+      setCalEvents(calCache.current.get(calDateISO) ?? []);
+      setCalState("ok");
       setUpNextEvents([
-        ...(todayRes.status === "ok" ? todayRes.events.map((e) => ({ ...e, dayOffset: 0 as const })) : []),
-        ...(tomorrowRes.status === "ok" ? tomorrowRes.events.map((e) => ({ ...e, dayOffset: 1 as const })) : []),
+        ...(calCache.current.get(todayISO) ?? []).map((e) => ({ ...e, dayOffset: 0 as const })),
+        ...(calCache.current.get(isoShift(todayISO, 1)) ?? []).map((e) => ({ ...e, dayOffset: 1 as const })),
       ]);
-    })();
+    });
+
     return () => { stale = true; };
-  }, [googleConnected, dateStr]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleConnected, calDateISO, daysToLoad, todayISO]);
 
   function shiftCalDay(delta: number) {
     setCalDate((prev) => {
