@@ -1219,7 +1219,7 @@ export default function Dashboard({
         <div className="grid">
           {/* ===== LEFT ===== */}
           <div className="col">
-            <div className="card">
+            <div className="card stack-todo">
               <div className="card-head">
                 <div className="card-title">To-Do List</div>
                 {microsoftConnected && <span className="tag plain"><span className="num">{doneCount}/{starredTasks.length}</span></span>}
@@ -1280,7 +1280,7 @@ export default function Dashboard({
               )}
             </div>
 
-            <div className="card">
+            <div className="card stack-note">
               <div className="card-head">
                 <span className="tag rose">Quick Note</span>
               </div>
@@ -1326,13 +1326,13 @@ export default function Dashboard({
 
           {/* ===== CENTER ===== */}
           <div className="col">
-            <div className="clockblock">
+            <div className="clockblock stack-clock">
               <div className="bigclock">{clockStr}<span className="sec">:{secStr}</span></div>
               <div className="bigdate">{dateStr}</div>
             </div>
 
             {googleConnected && nextUpEvent && (
-              <div className="card">
+              <div className="card stack-next-up">
                 <div className="card-head">
                   <div className="next-up-head-left">
                     <div className="card-title">Next Up</div>
@@ -1365,7 +1365,7 @@ export default function Dashboard({
               </div>
             )}
 
-            <div className="card">
+            <div className="card stack-calendar">
               <div className="cal-head">
                 <div className="m">{calLabel}</div>
                 <div className="cal-nav">
@@ -1478,7 +1478,7 @@ export default function Dashboard({
 
           {/* ===== RIGHT ===== */}
           <div className="col">
-            <div className="card habits-card">
+            <div className="card habits-card stack-habits">
               <div className="card-head">
                 <div className="card-title">Habits</div>
                 <span className="tag plain">{habitsDone}/{habitsToday.length} · {habitsPct}%</span>
@@ -1522,7 +1522,7 @@ export default function Dashboard({
               </div>
             </div>
 
-            <div className="card">
+            <div className="card stack-activity">
               <div className="card-head">
                 <div className="card-title">Activity</div>
                 <div className="heat-nav">

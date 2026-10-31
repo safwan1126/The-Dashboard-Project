@@ -731,6 +731,16 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 @media (max-width: 1200px) {
   .grid { grid-template-columns: 1fr; }
   .rail { display: none; }
+  /* flatten the three columns so every widget is a direct grid item
+     and can be ordered independently of its column */
+  .col { display: contents; }
+  .stack-clock { order: 1; }
+  .stack-next-up { order: 2; }
+  .stack-todo { order: 3; }
+  .stack-calendar { order: 4; }
+  .stack-habits { order: 5; }
+  .stack-note { order: 6; }
+  .stack-activity { order: 7; }
 }
 
 /* ============ TASKS SCREEN ============ */
