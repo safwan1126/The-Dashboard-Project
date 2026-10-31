@@ -141,8 +141,14 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
   display: grid; grid-template-columns: 1fr auto 1fr;
   align-items: start; margin-bottom: 30px;
 }
-.brand .name { font-size: 36px; font-weight: 700; letter-spacing: -0.02em; }
-.brand .sub  { font-size: 12px; color: var(--ink-3); margin-top: 1px; font-weight: 500; }
+.brand .name { font-size: 25px; font-weight: 700; letter-spacing: -0.02em; }
+.brand { display: flex; align-items: center; gap: 7px; }
+.brand .sub  {
+  display: flex; flex-direction: column;
+  border-left: 1px solid var(--line); padding-left: 7px;
+  font-size: 9px; line-height: 1.2; font-weight: 600;
+  color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em;
+}
 .screen-nav {
   align-self: center; display: flex; align-items: center; gap: 10px;
 }
@@ -685,10 +691,16 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .pomo-page-reset svg { width: 20px; height: 20px; }
 
 /* ============ NEXT UP (home page, under the clock) ============ */
-.next-up-head-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.next-up-head-divider { flex: 0 0 auto; width: 1px; height: 12px; background: var(--ink-4); }
+.next-up-head-left { display: flex; align-items: center; gap: 7px; min-width: 0; }
+/* Matches the .brand pattern: bold wordmark, hairline rule, small uppercase label. */
+.stack-next-up .card-title {
+  font-size: 14px; font-weight: 700; letter-spacing: -0.02em;
+  text-transform: none; color: var(--ink);
+}
+.next-up-head-divider { flex: 0 0 auto; width: 1px; height: 20px; background: var(--line); }
 .next-up-title-inline {
-  font-family: var(--serif); font-size: 14.5px; font-weight: 600; color: var(--ink-2);
+  font-size:14px; line-height: 1.2; font-weight: 400; color: var(--ink-3); text-transform: capitalize
+  ; letter-spacing: 0.07em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
 .next-up-meta { display: flex; align-items: center; gap: 12px; margin-top: 0; }

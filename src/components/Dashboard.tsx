@@ -1155,6 +1155,10 @@ export default function Dashboard({
       <header className="topbar">
         <div className="brand">
           <div className="name">LifeOS</div>
+          <div className="sub">
+            <span>operating</span>
+            <span>system</span>
+          </div>
         </div>
         <nav className="screen-nav">
           <button
