@@ -140,8 +140,10 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .topbar {
   display: grid; grid-template-columns: 1fr auto 1fr;
   align-items: start; margin-bottom: 30px;
+  /* keeps the brand off the nav once the 1fr columns collapse on narrow viewports */
+  column-gap: 28px;
 }
-.brand .name { font-size: 25px; font-weight: 700; letter-spacing: -0.02em; }
+.brand .name { font-size: 25px; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; }
 .brand { display: flex; align-items: center; gap: 7px; }
 .brand .sub  {
   display: flex; flex-direction: column;
