@@ -141,7 +141,7 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
   display: grid; grid-template-columns: 1fr auto 1fr;
   align-items: start; margin-bottom: 30px;
 }
-.brand .name { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
+.brand .name { font-size: 36px; font-weight: 700; letter-spacing: -0.02em; }
 .brand .sub  { font-size: 12px; color: var(--ink-3); margin-top: 1px; font-weight: 500; }
 .screen-nav {
   align-self: center; display: flex; align-items: center; gap: 10px;

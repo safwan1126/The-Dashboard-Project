@@ -1155,7 +1155,6 @@ export default function Dashboard({
       <header className="topbar">
         <div className="brand">
           <div className="name">LifeOS</div>
-          <div className="sub">Personal operating system</div>
         </div>
         <nav className="screen-nav">
           <button
@@ -2005,6 +2004,56 @@ export default function Dashboard({
                   <div className="pomo-page-time num">{pomoTime}</div>
                   {pomoPhase === "focus" && pomoTaskChosen && pomoTaskName && (
                     <div className="pomo-page-task-label">{pomoTaskName}</div>
+                  )}
+                </div>
+                <div className="pomo-ring-settings-wrap">
+                  <button
+                    className={"pomo-ring-settings-btn" + (pomoSettingsOpen ? " active" : "")}
+                    aria-label="Timer settings" title="Timer settings"
+                    disabled={pomoRunning}
+                    onClick={() => { setPomoSettingsOpen(o => !o); setPomoCustomInput(""); }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                  </button>
+                  {pomoSettingsOpen && (
+                    <div className="pomo-settings">
+                      <div className="pomo-settings-label">Duration (min)</div>
+                      <div className="pomo-settings-presets">
+                        {[5, 10, 15, 20, 25, 30, 45, 60].map(m => (
+                          <button
+                            key={m}
+                            className={"pomo-settings-preset" + (pomoMinutes === m && !pomoCustomInput ? " active" : "")}
+                            onClick={() => applyPomoMinutes(m)}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="pomo-settings-custom">
+                        <input
+                          className="pomo-settings-input"
+                          type="number" min="1" max="240" placeholder="Custom"
+                          value={pomoCustomInput}
+                          onChange={e => setPomoCustomInput(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") {
+                              const v = parseInt(pomoCustomInput);
+                              if (v >= 1 && v <= 240) applyPomoMinutes(v);
+                            }
+                          }}
+                        />
+                        <button
+                          className="pomo-settings-apply"
+                          disabled={!pomoCustomInput || parseInt(pomoCustomInput) < 1 || parseInt(pomoCustomInput) > 240}
+                          onClick={() => { const v = parseInt(pomoCustomInput); if (v >= 1 && v <= 240) applyPomoMinutes(v); }}
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
