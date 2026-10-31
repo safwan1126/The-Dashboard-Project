@@ -27,6 +27,10 @@ vi.mock("@/lib/data/habits", () => ({
   updateHabitFrequency: vi.fn(async () => undefined),
   toggleHabitToday: vi.fn(async () => 0),
 }));
+vi.mock("@/lib/data/taskPins", () => ({
+  setTaskPin: vi.fn(async () => ({ success: true })),
+  importTaskPins: vi.fn(async () => ({ success: true })),
+}));
 vi.mock("@/lib/data/pomoSessions", () => ({
   addPomoSession: vi.fn(async () => undefined),
 }));

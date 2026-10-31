@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { syncTasksToMicrosoft, deleteTaskFromMicrosoft } from "@/lib/microsoft/syncTasks";
-import type { RemoteTask } from "@/lib/microsoft/types";
+import { setTaskPin, importTaskPins } from "@/lib/data/taskPins";
+import type { PinnedTask } from "@/lib/data/taskPinQueries";
 import type { CalendarEvent, CalendarResult } from "@/lib/google/types";
 import type { PomoSessionRow } from "@/lib/data/pomoTypes";
 import {
@@ -38,6 +39,19 @@ async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url} responded ${res.status}`);
   return res.json();
+}
+
+const LEGACY_PINNED_KEY = "pinnedTaskNames";
+
+function readLegacyPinnedNames(): string[] {
+  try {
+    const raw = localStorage.getItem(LEGACY_PINNED_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((n): n is string => typeof n === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 function dateKey(d: Date): string {
@@ -198,6 +212,15 @@ function TrashIcon() {
   );
 }
 
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
 function PaperclipIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -245,6 +268,9 @@ export default function Dashboard({
   const [syncing, startSync] = useTransition();
   const [syncStatus, setSyncStatus] = useState<"idle" | "success" | "error">("idle");
   const isFirstRender = useRef(true);
+  // Set when the sync itself updates `tasks` (attaching Microsoft ids), so
+  // that write doesn't bounce straight back into another sync.
+  const skipNextSync = useRef(false);
 
   /* ---------- profile name ---------- */
   const [profileName, setProfileName] = useState(initialName);
@@ -338,16 +364,12 @@ export default function Dashboard({
     : "";
 
   /* ---------- tasks (shared between screens) ---------- */
-  // Microsoft To Do has no "pinned" concept, so the starred flag can't round-trip
-  // through the sync — it's tracked locally by task name instead.
-  const PINNED_KEY = "pinnedTaskNames";
-  function readPinned(): Set<string> {
-    try { return new Set(JSON.parse(localStorage.getItem(PINNED_KEY) || "[]")); } catch { return new Set(); }
-  }
-  function setPinned(name: string, starred: boolean) {
-    const pinned = readPinned();
-    if (starred) pinned.add(name); else pinned.delete(name);
-    localStorage.setItem(PINNED_KEY, JSON.stringify([...pinned]));
+  // Microsoft To Do has no "pinned" concept, so the starred flag can't
+  // round-trip through the sync — it's kept in Supabase instead, which is what
+  // makes a pin follow the user between browsers and devices. Reads come back
+  // with /api/tasks; writes go through the Server Action below.
+  function persistPin(task: { msId?: string; name: string }, starred: boolean) {
+    setTaskPin(task.msId ?? null, task.name, starred).catch(console.error);
   }
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -357,6 +379,10 @@ export default function Dashboard({
   const tasksAddInputRef = useRef<HTMLInputElement>(null);
   const [tasksAdding, setTasksAdding] = useState(false);
   const [tasksDraft, setTasksDraft] = useState("");
+  // Index of the task whose name is being edited in place, or null.
+  const [editingTask, setEditingTask] = useState<number | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (adding) addInputRef.current?.focus();
@@ -366,6 +392,17 @@ export default function Dashboard({
     if (tasksAdding) tasksAddInputRef.current?.focus();
   }, [tasksAdding]);
 
+  useEffect(() => {
+    if (editingTask === null) return;
+    const input = editInputRef.current;
+    if (!input) return;
+    input.focus();
+    // Caret at the end rather than the whole name selected: a rename is
+    // usually a tweak, and a selection would have the first keystroke wipe it.
+    const end = input.value.length;
+    input.setSelectionRange(end, end);
+  }, [editingTask]);
+
   function toggleTask(i: number) {
     setTasks((prev) => prev.map((t, idx) => (idx === i ? { ...t, done: !t.done } : t)));
   }
@@ -374,7 +411,7 @@ export default function Dashboard({
     setTasks((prev) => prev.map((t, idx) => {
       if (idx !== i) return t;
       const starred = !t.starred;
-      setPinned(t.name, starred);
+      persistPin(t, starred);
       return { ...t, starred };
     }));
   }
@@ -382,15 +419,40 @@ export default function Dashboard({
   function deleteTask(i: number) {
     const task = tasks[i];
     setTasks((prev) => prev.filter((_, idx) => idx !== i));
-    setPinned(task.name, false);
+    persistPin(task, false);
     if (microsoftConnected && task.msId) deleteTaskFromMicrosoft(task.msId);
+  }
+
+  function startRename(i: number) {
+    setEditingTask(i);
+    setRenameDraft(tasks[i].name);
+  }
+
+  function finishRename(commit: boolean) {
+    if (editingTask === null) return;
+    const i = editingTask;
+    const task = tasks[i];
+    const trimmed = renameDraft.trim();
+    if (commit && trimmed && trimmed !== task.name) {
+      // A pin row is looked up by Microsoft id first, so a renamed task that
+      // already has one is healed by the backfill in resolveTaskPins. A task
+      // typed in this session has no id yet and its pin is held by the old
+      // name alone, so that row is moved across by hand.
+      if (task.starred && !task.msId) {
+        persistPin({ name: task.name }, false);
+        persistPin({ name: trimmed }, true);
+      }
+      setTasks((prev) => prev.map((t, idx) => (idx === i ? { ...t, name: trimmed } : t)));
+    }
+    setEditingTask(null);
+    setRenameDraft("");
   }
 
   function finishAdd(commit: boolean) {
     const trimmed = draft.trim();
     if (commit && trimmed) {
       const d = new Date();
-      setPinned(trimmed, true);
+      persistPin({ name: trimmed }, true);
       setTasks((prev) => [...prev, { name: trimmed, time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, done: false, starred: true }]);
     }
     setAdding(false);
@@ -407,18 +469,27 @@ export default function Dashboard({
     setTasksDraft("");
   }
 
-  // On mount, fetch tasks from Microsoft
+  // On mount, fetch tasks from Microsoft (pins resolved server-side)
   useEffect(() => {
     if (!microsoftConnected) return;
-    const pinned = readPinned();
-    getJson<RemoteTask[]>("/api/tasks")
+    // Pins used to live in localStorage; carry any left over into Supabase
+    // before the fetch reads them, then drop the key for good.
+    const legacy = readLegacyPinnedNames();
+    const ready = legacy.length > 0
+      ? importTaskPins(legacy)
+          .then(() => localStorage.removeItem(LEGACY_PINNED_KEY))
+          .catch(console.error)
+      : Promise.resolve();
+
+    ready
+      .then(() => getJson<PinnedTask[]>("/api/tasks"))
       .then((remoteTasks) => {
         setTasks(remoteTasks.map((rt) => ({
           msId: rt.id,
           name: rt.name,
           time: "--:--",
           done: rt.done,
-          starred: pinned.has(rt.name),
+          starred: rt.pinned,
         })));
         isFirstRender.current = false;
       })
@@ -428,9 +499,19 @@ export default function Dashboard({
   // Auto-sync to Microsoft on every task change (skip the initial fetch)
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
+    if (skipNextSync.current) { skipNextSync.current = false; return; }
     if (!microsoftConnected) return;
     startSync(async () => {
       const result = await syncTasksToMicrosoft(tasks);
+      // The sync matches on the Microsoft id, so a task that was just typed
+      // needs the id it was given attached before the next pass — otherwise it
+      // would be matched by title, which a rename breaks.
+      const ids = result.ids ?? [];
+      if (ids.length > 0) {
+        const msIdByName = new Map(ids.map((i) => [i.name, i.msId]));
+        skipNextSync.current = true;
+        setTasks((prev) => prev.map((t) => (t.msId ? t : { ...t, msId: msIdByName.get(t.name) })));
+      }
       setSyncStatus(result.success ? "success" : "error");
       setTimeout(() => setSyncStatus("idle"), 3000);
     });
@@ -1539,7 +1620,22 @@ export default function Dashboard({
                     <CheckIcon />
                   </span>
                 </span>
-                <span className="tasks-name">{t.name}</span>
+                {editingTask === i ? (
+                  <input
+                    ref={editInputRef}
+                    className="add-input tasks-name-input"
+                    value={renameDraft}
+                    onChange={(e) => setRenameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") finishRename(true);
+                      if (e.key === "Escape") finishRename(false);
+                    }}
+                    onBlur={() => finishRename(true)}
+                    aria-label="Task name"
+                  />
+                ) : (
+                  <span className="tasks-name" onClick={() => startRename(i)} title="Click to rename">{t.name}</span>
+                )}
                 <span className="tasks-time num">{t.time}</span>
                 {isPinned ? (
                   <button
@@ -1558,6 +1654,9 @@ export default function Dashboard({
                     <PinIcon />
                   </button>
                 )}
+                <button className="tasks-edit" onClick={() => startRename(i)} aria-label="Rename task">
+                  <PencilIcon />
+                </button>
                 <button className="tasks-delete" onClick={() => deleteTask(i)} aria-label="Delete task">
                   <TrashIcon />
                 </button>

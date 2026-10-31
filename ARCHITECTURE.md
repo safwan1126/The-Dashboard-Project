@@ -233,7 +233,9 @@ The Dashboard Project/
       │  └─ middleware.ts      # The session-refresh logic the proxy calls
       ├─ data/
       │  ├─ habits.ts          # Server Actions for habits CRUD + completions
-      │  └─ pomoSessions.ts    # Server Actions for pomodoro history
+      │  ├─ pomoSessions.ts    # Server Actions for pomodoro history
+      │  ├─ taskPinQueries.ts  # Read side: resolve the pinned flag for To Do tasks
+      │  └─ taskPins.ts        # Server Actions for pinning/unpinning tasks
       ├─ google/
       │  ├─ getAccessToken.ts  # Refresh-token -> access-token exchange
       │  └─ fetchEvents.ts     # Fetch a day of Google Calendar events
@@ -396,6 +398,7 @@ its structure. You apply them in numbered order. There are five tables:
 | `microsoft_tokens` | `user_id` (PK), `refresh_token`, `updated_at` | The user's Microsoft To Do refresh token |
 | `pomo_sessions` | `id`, `user_id`, `task_name`, `completed_at`, `duration` (seconds), `created_at` | One row per completed focus session |
 | `profiles` | `id` (PK = auth user id), `full_name`, timestamps | Display name, auto-created by a trigger |
+| `task_pins` | `id`, `user_id`, `ms_task_id` (nullable), `name`, `created_at` | One row per task pinned to the home to-do widget |
 
 > Note: `microsoft_tokens` is referenced by the code and read in `page.tsx`, but
 > there's no `*_microsoft_tokens.sql` migration file in the repo — it was likely
@@ -434,8 +437,9 @@ security boundary. RLS is the security boundary.
 | Habits + daily completions + streaks | Nutrition card (hard-coded calories/macros/water) |
 | Pomodoro sessions (history) | Activity heatmap (random values, regenerated each mount) |
 | Profile name | Quick Note (local state with default text) |
-| OAuth refresh tokens (Google/Microsoft) | Pinned-task flags (localStorage only — see §9) |
-| Tasks (in Microsoft To Do, not Supabase) | Pomodoro *settings* like duration (cookie only) |
+| OAuth refresh tokens (Google/Microsoft) | Activity heatmap, nutrition card (see right column above) |
+| Pinned-task flags (`task_pins` — see §9) | Pomodoro *settings* like duration (cookie only) |
+| Tasks (in Microsoft To Do, not Supabase) | |
 
 ---
 
@@ -523,24 +527,46 @@ account, in a list named `"LifeOS"`. The flow:
 
 - **On mount**, if Microsoft is connected, `fetchMicrosoftTasks()` pulls the
   current tasks from the `LifeOS` list into local `tasks` state.
-- **Every change** to `tasks` (add/toggle/delete) triggers an effect that calls
+- **Every change** to `tasks` (add/toggle/rename/delete) triggers an effect that calls
   `syncTasksToMicrosoft(tasks)` — pushing the changes back. A `useTransition`
   drives the "Syncing…/Synced!/Sync failed" status pill. An `isFirstRender` ref
   skips syncing on the very first load (so the initial fetch doesn't immediately
   echo back).
 - **"Pinned" tasks** are the ones shown in the home to-do widget. Microsoft To
   Do has no "pinned" concept, so the starred/pinned flag **can't round-trip
-  through the sync**. It's tracked **locally in `localStorage`, keyed by task
-  name** (`PINNED_KEY = "pinnedTaskNames"`). Tasks added from the *home widget*
-  are auto-pinned; tasks added from the *Tasks screen* are not.
+  through the sync**. It lives in Supabase instead, in `task_pins`, so a pin
+  follows the user between browsers and devices. The flag is resolved
+  server-side and comes back on `/api/tasks` (`taskPinQueries.ts`); pin/unpin
+  writes go through the `setTaskPin` Server Action (`taskPins.ts`). Pins are
+  keyed by the stable To Do task id, falling back to the name for a task that
+  hasn't reached To Do yet — the next fetch backfills the id. Pins that
+  pre-date this (the old `localStorage` key `pinnedTaskNames`) are imported
+  once on mount by `importTaskPins`, then the key is removed. Tasks added from
+  the *home widget* are auto-pinned; tasks added from the *Tasks screen* are
+  not.
 - The Tasks screen splits tasks into "Pinned to To-Do" and "Other" sections,
-  with pin/unpin and delete controls. Deleting also calls
+  with rename, pin/unpin and delete controls. Deleting also calls
   `deleteTaskFromMicrosoft(msId)`.
+- **Renaming** happens in place on the Tasks screen (click the name, or the
+  pencil button; the caret opens at the end of the name, Enter or blur
+  commits, Escape discards). It only edits local
+  `tasks` state — the sync effect pushes the new title to To Do, which works
+  because matching is by id. The home widget's rows stay click-to-toggle and
+  are not editable. A rename needs no pin write when the task has a To Do id
+  (`resolveTaskPins` backfills the row's name on the next read); a task typed
+  in the current session has no id yet and its pin is held by the old name, so
+  that row is moved across by hand.
 
-Sync matching is **by task title**: `syncTasksToMicrosoft` fetches existing
-remote tasks, builds a `Map` keyed by title, then decides what to create vs.
-what to update. (Implication: two tasks with the same name, or renaming a task,
-can confuse the matcher — see [§15](#15-gotchas-limitations--tech-debt).)
+Sync matching is **by Microsoft task id**: `syncTasksToMicrosoft` fetches the
+remote tasks, keys them by id, and decides what to create vs. what to update
+from that — so a renamed task is renamed in To Do (title is PATCHed alongside
+status) instead of being created again under the new title. A task that has no
+id yet (just typed on the dashboard) falls back to a title match, which adopts
+a task that already exists in To Do rather than duplicating it; otherwise it is
+created. The action returns the ids it created or adopted as
+`{ ids: [{ name, msId }] }`, and the dashboard attaches them to its `tasks`
+state so the next pass matches by id. A `skipNextSync` ref keeps that write
+from bouncing back into another sync.
 
 ### Habits — backed by Supabase
 
@@ -849,14 +875,17 @@ development.
    it isn't a real "consecutive days" calculation and can drift from reality
    (e.g. it doesn't reset when you miss a day). The `habit_completions` table has
    the raw data to compute true streaks if you want to.
-5. **Microsoft task sync matches by title.** Renaming a task or having two tasks
-   with the same name can confuse the create-vs-update logic in `syncTasks.ts`.
-   There's no stable id mapping for *new* tasks until the next fetch.
-6. **Pinned flags are local + name-keyed.** Pins live only in this browser's
-   `localStorage`, keyed by task name — they don't sync across devices and break
-   if a task is renamed.
-7. **Debug `console.log`s left in `syncTasks.ts`.** Several logging statements
-   (list id, existing tasks, etc.) are still present and would be worth removing.
+5. **Two tasks with the same name still collide.** Sync and pins both key on the
+   Microsoft task id now, but a task that has no id yet is matched by title, so
+   a *brand-new* task typed with the name of an existing one adopts that task
+   instead of creating its own. Same for the `task_pins` name fallback.
+6. **A pin is per task, not per name.** `task_pins` rows are keyed by
+   `ms_task_id` once known (`name` is the fallback until the next fetch
+   backfills the id), so pins survive a rename and follow the user across
+   devices — but a pin written against a name that never reaches To Do just
+   sits there.
+7. **Nothing reconciles deletions made in To Do.** A task deleted on the phone
+   leaves its `task_pins` row behind; the row is harmless but never cleaned up.
 8. **Heatmap re-randomizes every mount**, so it visibly changes on each load —
    fine for a mock, surprising if you forget it's fake.
 9. **`microsoft_tokens` has no tracked migration.** The table is used in code but

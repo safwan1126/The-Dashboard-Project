@@ -777,7 +777,7 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 }
 .tasks-row {
   display: grid;
-  grid-template-columns: 48px 1fr auto 36px 36px;
+  grid-template-columns: 48px 1fr auto 36px 36px 36px;
   align-items: center; gap: 0;
   padding: 0 10px 0 0;
   min-height: 48px;
@@ -808,7 +808,13 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .tasks-row.done .tasks-check .check svg { opacity: 1; }
 .tasks-check:hover .check { border-color: var(--sage); }
 
-.tasks-name { font-size: 14.5px; color: var(--ink); font-weight: 450; }
+.tasks-name { font-size: 14.5px; color: var(--ink); font-weight: 450; cursor: text; }
+/* The rename field sits in the name cell, so it drops the add-input's own
+   block spacing and keeps the row's height. */
+.tasks-name-input {
+  width: 100%; margin-top: 0; padding: 6px 8px;
+  font-size: 14.5px; font-weight: 450;
+}
 .tasks-time { font-size: 12px; color: var(--ink-3); white-space: nowrap; padding-right: 6px; font-variant-numeric: tabular-nums; }
 
 .tasks-pin {
@@ -825,6 +831,7 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
 .tasks-row:hover .tasks-unpin { opacity: 1; color: var(--ink-3); }
 .tasks-unpin:hover { color: var(--ink-2) !important; }
 
+.tasks-edit,
 .tasks-delete {
   display: flex; align-items: center; justify-content: center;
   width: 32px; height: 32px; border-radius: 8px;
@@ -832,8 +839,11 @@ html[data-voice="Mono"] .nutri-cal .big, html[data-voice="Mono"] .pomo-c .ptime 
   color: var(--ink-4); transition: color .15s, opacity .15s;
   opacity: 0;
 }
+.tasks-edit svg,
 .tasks-delete svg { width: 14px; height: 14px; }
+.tasks-row:hover .tasks-edit,
 .tasks-row:hover .tasks-delete { opacity: 1; }
+.tasks-edit:hover { color: var(--sage-deep); }
 .tasks-delete:hover { color: oklch(0.55 0.2 20); }
 
 /* ============ HABITS SCREEN ============ */
