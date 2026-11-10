@@ -2,7 +2,7 @@
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: var(--s-6) var(--gutter);
   background: var(--paper);
 }
 
@@ -13,44 +13,44 @@
   border: 1px solid var(--line-2);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 36px 32px;
+  padding: var(--s-8) var(--s-7);
 }
 
 .brand {
-  font-size: 13px;
+  font-size: var(--t-xs);
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--sage-deep);
-  margin-bottom: 18px;
+  margin-bottom: var(--s-4);
 }
 
 .title {
   font-family: var(--serif);
-  font-size: 28px;
+  font-size: var(--t-xl);
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--ink);
 }
 
 .sub {
-  font-size: 13.5px;
+  font-size: var(--t-base);
   color: var(--ink-3);
-  margin-top: 6px;
-  margin-bottom: 26px;
+  margin-top: var(--s-2);
+  margin-bottom: var(--s-6);
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--s-4);
 }
 
 .label {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  font-size: 12.5px;
+  gap: var(--s-2);
+  font-size: var(--t-sm);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -59,14 +59,13 @@
 
 .input {
   font-family: var(--sans);
-  font-size: 14.5px;
+  font-size: var(--t-base);
   font-weight: 500;
   color: var(--ink);
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  padding: 12px 14px;
-  outline: none;
+  padding: var(--s-3) var(--s-4);
   text-transform: none;
   letter-spacing: normal;
   transition: border-color 0.15s;
@@ -77,15 +76,15 @@
 }
 
 .button {
-  margin-top: 6px;
+  margin-top: var(--s-2);
   font-family: var(--sans);
-  font-size: 14.5px;
+  font-size: var(--t-base);
   font-weight: 600;
-  color: oklch(0.98 0.01 130);
+  color: var(--on-accent);
   background: var(--sage-deep);
   border: none;
   border-radius: var(--radius-sm);
-  padding: 14px;
+  padding: var(--s-4);
   cursor: pointer;
   transition: filter 0.15s;
 }
@@ -95,8 +94,8 @@
 }
 
 .foot {
-  margin-top: 22px;
-  font-size: 13px;
+  margin-top: var(--s-6);
+  font-size: var(--t-sm);
   color: var(--ink-3);
   text-align: center;
 }
@@ -111,21 +110,21 @@
 }
 
 .notice {
-  font-size: 13px;
+  font-size: var(--t-sm);
   font-weight: 500;
   color: var(--sage-deep);
   background: var(--sage-faint);
   border-radius: var(--radius-sm);
-  padding: 11px 14px;
-  margin-bottom: 18px;
+  padding: var(--s-3) var(--s-4);
+  margin-bottom: var(--s-4);
 }
 
 .error {
-  font-size: 13px;
+  font-size: var(--t-sm);
   font-weight: 500;
-  color: var(--rose);
+  color: var(--rose-deep);
   background: var(--rose-faint);
   border-radius: var(--radius-sm);
-  padding: 11px 14px;
-  margin-bottom: 18px;
+  padding: var(--s-3) var(--s-4);
+  margin-bottom: var(--s-4);
 }

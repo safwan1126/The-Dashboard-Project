@@ -40,6 +40,9 @@ vi.mock("@/lib/data/notes", () => ({
   addNoteImages: vi.fn(async () => undefined),
   removeNoteImage: vi.fn(async () => undefined),
 }));
+vi.mock("@/app/auth/actions", () => ({
+  signOut: vi.fn(async () => undefined),
+}));
 vi.mock("@/lib/settings/actions", () => ({
   updateProfileName: vi.fn(async () => undefined),
   changePassword: vi.fn(async () => undefined),

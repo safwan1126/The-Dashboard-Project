@@ -35,15 +35,17 @@
 
 LifeOS is a **personal dashboard** — a single-page "operating system for your
 life" gated behind a login. Once signed in, you get one screen with several
-widgets and a top-nav that switches between five views:
+widgets and a top-nav that switches between five destinations, plus Settings in
+the account menu (the avatar, top right):
 
 | Screen | What it does |
 | --- | --- |
 | **Home** | The dashboard grid: profile, to-do widget, quick note, live clock, habits, calendar, nutrition, activity heatmap |
 | **Tasks** | Full task manager backed by **Microsoft To Do** |
-| **Habits** | Habit tracker with per-day-of-week scheduling and streaks |
-| **Pomodoro** | Focus timer (focus + break phases) with a session-history timeline |
-| **Settings** | Account name, dark/glass appearance toggles, connect/disconnect integrations |
+| **Habits** | Habit list with per-day-of-week scheduling and streaks, plus a 30-day **Tracker** view switched from inside the screen |
+| **Focus** | The pomodoro timer (focus + break phases) with a session-history timeline. The URL and code still call it `pomodoro` |
+| **Notes** | Every captured note as a card |
+| **Settings** | Account name, appearance (dark, glass, accent, voice), connect/disconnect integrations. Reached from the account menu, which also holds Sign out |
 
 The visual design (the "Sage" look — warm paper background, sage-green accents,
 serif headings) was first built as a plain HTML/CSS/JS prototype. This repo is
@@ -211,7 +213,7 @@ The Dashboard Project/
    │  ├─ layout.tsx            # Root HTML shell, fonts, no-flash theme script
    │  ├─ page.tsx              # "/" — the dashboard route (server component, auth-gated)
    │  ├─ loading.tsx           # Instant loading screen streamed while page.tsx loads
-   │  ├─ globals.css           # ALL dashboard styling + design tokens (~840 lines)
+   │  ├─ globals.css           # ALL dashboard styling: tokens and scales first, then components
    │  ├─ auth.module.css       # Scoped styling for the login/signup pages
    │  ├─ login/page.tsx        # Login screen (server component, renders a form)
    │  ├─ signup/page.tsx       # Signup screen
@@ -224,7 +226,8 @@ The Dashboard Project/
    │     └─ microsoft/callback/route.ts# Microsoft OAuth redirect target -> stores token
    │
    ├─ components/
-   │  └─ Dashboard.tsx         # THE app UI — 1.6k-line client component, all 5 screens
+   │  ├─ Dashboard.tsx         # THE app UI — one large client component, every screen
+   │  └─ icons.tsx             # Every SVG icon, as small components that take SVG props
    │
    └─ lib/                     # Non-UI logic, grouped by concern
       ├─ supabase/
@@ -496,8 +499,10 @@ are all mounted in one component rather than being separate routes.
 The component holds a lot of `useState`. Grouped by feature:
 
 - **Profile:** `profileName`, `nameDraft`, `nameSaved`
-- **Appearance:** `darkMode`, `glass` (mirrored to `localStorage` + a `data-*`
-  attribute on `<html>`)
+- **Appearance:** `darkMode`, `glass`, `accent`, `voice` (each mirrored to
+  `localStorage` + a `data-*` attribute on `<html>`; the last two through the
+  small `useThemeAttr` hook)
+- **Account menu:** `userMenuOpen` (the avatar popover with Settings + Sign out)
 - **Clock:** `now` (a `Date`, ticked every second by an interval)
 - **Tasks:** `tasks`, plus add-form state for both the home widget and the Tasks
   screen (`adding`/`draft` and `tasksAdding`/`tasksDraft`), and Microsoft sync
@@ -652,9 +657,10 @@ replaces the note on Enter. Not persisted — refreshing resets it.
 
 ### Settings screen
 
-Three sections: **Account** (editable name, read-only email), **Appearance**
-(dark-mode + glass-mode switches), and **Integrations** (connect/disconnect
-Microsoft and Google). Disconnecting deletes the relevant `*_tokens` row (via a
+Reached from the account menu rather than the nav. Sections: **Account**
+(editable name, read-only email, password), **Appearance** (dark-mode and
+glass-mode switches, plus Accent and Voice pickers), **Integrations**
+(connect/disconnect Microsoft and Google), and **Focus timer**. Disconnecting deletes the relevant `*_tokens` row (via a
 Server Action) and calls `router.refresh()` to re-pull server state.
 
 ---
@@ -728,9 +734,51 @@ The `:root` block defines the whole palette as CSS variables — and notably use
 the **`oklch()` color space** (`oklch(lightness chroma hue)`) rather than hex.
 oklch is perceptually uniform, which makes it easy to derive consistent
 tints/shades by nudging lightness. Tokens include `--paper`, `--card`, `--ink*`
-(text shades), `--sage*` (the green accent family), `--rose*`, plus radii,
-shadow, and the three font families (Playfair Display serif, Hanken Grotesk sans,
-JetBrains Mono).
+(text shades), `--sage*` (the accent family — named for the default, but
+`data-accent` swaps the whole ramp), `--rose*`, plus radii, shadow, and the
+three font families (Playfair Display serif, Hanken Grotesk sans, JetBrains
+Mono).
+
+Three rules keep the tokens honest:
+
+- **Text colours.** `--ink`, `--ink-2` and `--ink-3` all clear WCAG AA (4.5:1)
+  on both `--paper` and `--card`. `--ink-4` does not, so it is only for
+  hairlines, placeholders and disabled states. The same split exists for the
+  accents: `--sage` and `--rose` are for fills and marks, `--sage-deep` and
+  `--rose-deep` are the ones safe as text. Anything sitting *on* an accent fill
+  uses `--on-accent`, which flips between light and dark with the mood.
+- **Type scale.** Seven sizes, `--t-xs` (11px) to `--t-display` (the clock).
+  Every `font-size` in `globals.css` is one of them; the only exception is the
+  brand wordmark, which is sized as artwork.
+- **Spacing.** A 4px grid, `--s-1` (4px) to `--s-8` (40px), used for every gap,
+  padding and margin. A raw pixel value left in the file is a component
+  dimension (a 32px button, a 5px bar), not spacing.
+
+### Shared patterns
+
+- **Card header.** Every home card uses the same header: `.card-eyebrow`, an
+  optional serif `.card-title` when the card has a subject (a date, an event),
+  and one `.card-meta` slot on the right.
+- **Card weight.** Cards sit on a border. Only the card that is live right now
+  gets `.primary` (the shadow): Next up while an event is left today, otherwise
+  the calendar.
+- **Empty state.** One `EmptyState` component (`.empty`) for every card and
+  screen. Cards stay mounted when they have nothing to show, so the layout
+  doesn't jump.
+- **Screen shell.** Tasks, Habits, Notes and Settings share `.page` /
+  `.page-header` / `.page-title`, with `.wide` and `.narrow` width variants.
+
+### Breakpoints
+
+| Width | Home layout |
+| --- | --- |
+| ≥ 1200px | Three columns |
+| 900–1199px | Two: clock, next up and calendar on the left, the four side cards stacked on the right |
+| < 900px | One column, ordered by the `.stack-*` classes |
+| < 760px | The nav also drops under the brand into its own scrolling row |
+
+The clock and timer use a fluid `clamp()` size, and the timer ring is sized
+from the viewport, so neither needs its own breakpoint.
 
 ### How modes are switched: `data-*` attributes on `<html>`
 
@@ -741,29 +789,31 @@ re-point the CSS variables:
 | --- | --- | --- | --- |
 | `data-mood` | `Charcoal` | Dark mode (overrides the palette) | ✅ Settings → Dark mode |
 | `data-glass` | `on` | Frosted glassmorphism on cards | ✅ Settings → Glass mode |
-| `data-accent` | `Indigo` / `Clay` / `Plum` | Alternate accent colors | ❌ defined in CSS, no UI |
-| `data-voice` | `Modern` / `Mono` | Alternate typography | ❌ defined in CSS, no UI |
+| `data-accent` | `Sage` / `Indigo` / `Clay` / `Plum` | Accent colour | ✅ Settings → Accent |
+| `data-voice` | `Modern` / `Mono` | Typeface for the clock, timer and titles | ✅ Settings → Voice |
 
-`data-accent` and `data-voice` are **vestigial** — they're carried over from the
-original prototype's "tweaks panel" and still have full CSS support, but
-nothing in the current React app sets them. They're latent features waiting
-for a UI, not dead weight you need to fear.
+With no `data-accent` set ("Auto" in Settings) the accent is sage in light mode
+and blue in Charcoal, which is how the app behaved before the picker existed.
+Choosing an accent pins it in both moods, so each one has a light ramp and a
+`[data-mood="Charcoal"][data-accent="…"]` dark ramp. Add a new accent by adding
+both blocks and an entry in `ACCENTS` in `Dashboard.tsx`.
 
 ### The no-flash theme script (clever bit)
 
-Dark/glass preferences are stored in `localStorage`. But `localStorage` isn't
+Theme preferences (dark, glass, accent, voice) are stored in `localStorage`. But `localStorage` isn't
 readable on the server, so a naive approach would render light-mode HTML first,
 then flip to dark after hydration — a jarring flash. To avoid this, `layout.tsx`
 inlines a tiny **blocking `<script>` in `<head>`** that reads `localStorage` and
-sets the `data-mood` / `data-glass` attributes **before the page paints**:
+sets the `data-*` attributes **before the page paints**:
 
 ```js
-(function(){
-  var d=localStorage.getItem('darkMode');
-  if(d==='true')document.documentElement.setAttribute('data-mood','Charcoal');
-  var g=localStorage.getItem('glass');
-  if(g==='true')document.documentElement.setAttribute('data-glass','on');
-})();
+(function(){try{
+  var e=document.documentElement, s=localStorage;
+  if(s.getItem('darkMode')==='true') e.setAttribute('data-mood','Charcoal');
+  if(s.getItem('glass')==='true') e.setAttribute('data-glass','on');
+  var a=s.getItem('accent'); if(a) e.setAttribute('data-accent',a);
+  var v=s.getItem('voice');  if(v) e.setAttribute('data-voice',v);
+}catch(_){}})();
 ```
 
 The `Dashboard` component then **adopts** that pre-applied value on mount
@@ -790,7 +840,7 @@ refresh?" tells you where the source of truth is.
 | OAuth refresh tokens | Supabase `*_tokens` | ✅ | ✅ |
 | Calendar events | **Google Calendar** (read live) | ✅ (it's Google's) | ✅ |
 | Pomodoro live timer + settings | Browser **cookie** (`pomodoro`) | ✅ (same browser) | ❌ |
-| Dark / glass mode | Browser **localStorage** | ✅ (same browser) | ❌ |
+| Dark / glass mode, accent, voice | Browser **localStorage** | ✅ (same browser) | ❌ |
 | Pinned-task flags | Browser **localStorage** (by task name) | ✅ (same browser) | ❌ |
 | Quick Note | React state (in-memory) | ❌ | ❌ |
 | Nutrition card | Hard-coded | ❌ (always the same) | — |
@@ -869,8 +919,8 @@ development.
 2. **Mock data presented as real.** Nutrition and the Activity heatmap look like
    features but are static/random. The Quick Note isn't persisted. Don't mistake
    them for working data flows.
-3. **Vestigial theme CSS.** `data-accent` and `data-voice` have full CSS but no
-   UI control. Either wire them into Settings or treat them as dormant.
+3. **Theme choices are per-browser.** Dark, glass, accent and voice live in
+   `localStorage`, so they don't follow you to another device.
 4. **Streaks are a naive counter.** `strk` just increments/decrements on toggle;
    it isn't a real "consecutive days" calculation and can drift from reality
    (e.g. it doesn't reset when you miss a day). The `habit_completions` table has
@@ -912,8 +962,6 @@ If you're looking to extend the app, in rough order of value-to-effort:
 - **Split `Dashboard.tsx`** into per-screen components + custom hooks
   (`usePomodoro`, `useCalendar`, `useTasks`). Good refactoring practice and makes
   everything after it easier.
-- **Surface `data-accent` / `data-voice`** as Settings controls, since the CSS is
-  already there.
 
 When you write code, remember `AGENTS.md`'s warning: this Next.js version is
 newer than most references, so check `node_modules/next/dist/docs/` for the

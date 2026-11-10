@@ -41,6 +41,9 @@ vi.mock("@/lib/data/notes", () => ({
   addNoteImages: vi.fn(async () => undefined),
   removeNoteImage: vi.fn(async () => undefined),
 }));
+vi.mock("@/app/auth/actions", () => ({
+  signOut: vi.fn(async () => undefined),
+}));
 vi.mock("@/lib/settings/actions", () => ({
   updateProfileName: vi.fn(async () => undefined),
   changePassword: vi.fn(async () => undefined),
@@ -122,31 +125,40 @@ afterEach(() => {
   localStorage.clear();
 });
 
+// The card itself is always mounted once the calendar is connected, so its
+// eyebrow is no proof that data arrived. The event's title is.
+async function nextUpTitle() {
+  return waitFor(() => {
+    const title = document.querySelector(".next-up-title");
+    expect(title).not.toBeNull();
+    return title as HTMLElement;
+  });
+}
+
 describe("Up next widget", () => {
   it("renders the next event under StrictMode's double-invoked effects", async () => {
     renderDashboard();
 
-    // The regression: both effect passes discarded the result, so this never
-    // appeared.
-    expect(await screen.findByText("Next Up")).toBeInTheDocument();
+    // The regression: both effect passes discarded the result, so the event
+    // never appeared.
+    expect(await nextUpTitle()).toHaveTextContent("Design review");
 
-    // Scoped to the widget — the same event also shows in the calendar day
-    // view, which is fed from the very same batched response.
-    expect(document.querySelector(".next-up-title-inline")).toHaveTextContent("Design review");
+    // The same event also shows in the calendar day view, which is fed from
+    // the very same batched response.
     expect(document.querySelector(".cal-block-title")).toHaveTextContent("Design review");
   });
 
   it("still issues only one calendar request despite the double mount", async () => {
     renderDashboard();
 
-    await screen.findByText("Next Up");
+    await nextUpTitle();
     // Deduped, not merely working: the two passes share one request.
     await waitFor(() => expect(calendarCalls).toBe(1));
   });
 
   it("asks for today and tomorrow in the same batch as the visible week", async () => {
     renderDashboard();
-    await screen.findByText("Next Up");
+    await nextUpTitle();
 
     const calendarUrl = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
       .map((c) => String(c[0]))
@@ -159,5 +171,27 @@ describe("Up next widget", () => {
 
     expect(days).toContain(isoOf(today));
     expect(days).toContain(isoOf(tomorrow));
+  });
+
+  it("stays mounted with an empty state when nothing is scheduled", async () => {
+    // Same calendar, no events on any day.
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/calendar")) {
+        const days = new URLSearchParams(url.split("?")[1]).get("days")!.split(",");
+        return new Response(
+          JSON.stringify({ status: "ok", days: Object.fromEntries(days.map((iso) => [iso, []])) }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+
+    renderDashboard();
+
+    // The card used to unmount here, which made the calendar below it jump.
+    expect(await screen.findByText("Nothing scheduled today or tomorrow.")).toBeInTheDocument();
+    expect(document.querySelector(".stack-next-up")).not.toBeNull();
+    expect(document.querySelector(".next-up-title")).toBeNull();
   });
 });

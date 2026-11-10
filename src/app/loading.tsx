@@ -11,16 +11,17 @@ export default function Loading() {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: "10px",
+        gap: "var(--s-2)",
         background: "var(--paper)",
         color: "var(--ink-3)",
       }}
     >
-      <style>{`@keyframes lifePulse{0%,100%{opacity:.45}50%{opacity:1}}`}</style>
+      <style>{`@keyframes lifePulse{0%,100%{opacity:.45}50%{opacity:1}}@media (prefers-reduced-motion: reduce){.life-pulse{animation:none!important}}`}</style>
       <div
+        className="life-pulse"
         style={{
           fontFamily: "var(--serif)",
-          fontSize: "26px",
+          fontSize: "var(--t-xl)",
           fontWeight: 600,
           color: "var(--ink)",
           letterSpacing: "-0.01em",
@@ -29,7 +30,7 @@ export default function Loading() {
       >
         LifeOS
       </div>
-      <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+      <div style={{ fontSize: "var(--t-xs)", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
         Loading…
       </div>
     </div>

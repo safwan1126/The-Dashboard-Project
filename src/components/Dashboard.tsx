@@ -27,6 +27,12 @@ import {
 import { createSingleFlight } from "@/lib/singleFlight";
 import { POMO_COOKIE, serializePomoState, type PomoState, type PomoPhase } from "@/lib/pomodoro";
 import { updateProfileName, changePassword, disconnectMicrosoft, disconnectGoogle } from "@/lib/settings/actions";
+import { signOut } from "@/app/auth/actions";
+import {
+  CheckIcon, ChecklistIcon, ChevronDownIcon, ClockIcon, ExternalLinkIcon, FlameIcon, GearIcon,
+  GoogleLogo, MicrosoftLogo, NoteIcon, PaperclipIcon, PauseIcon, PencilIcon, PinIcon, PinOffIcon,
+  PlayIcon, PlusIcon, ResetIcon, SignOutIcon, SkipIcon, SpinnerIcon, SyncIcon, TrashIcon,
+} from "./icons";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -64,8 +70,65 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+/* ---------- screens ---------- */
+type Screen = "home" | "tasks" | "habits" | "tracker" | "notes" | "pomodoro" | "settings";
+
+// The top-level destinations. "tracker" is a view inside Habits and "settings"
+// lives in the account menu, so neither appears here.
+const NAV: { key: Screen; label: string }[] = [
+  { key: "home", label: "Home" },
+  { key: "tasks", label: "Tasks" },
+  { key: "habits", label: "Habits" },
+  { key: "pomodoro", label: "Focus" },
+  { key: "notes", label: "Notes" },
+];
+
+/* ---------- theme options ---------- */
+// Values are what globals.css keys on (html[data-accent] / html[data-voice]).
+// The empty value is the default: no attribute at all.
+const ACCENTS: { value: string; label: string; swatch?: string }[] = [
+  { value: "", label: "Auto" },
+  { value: "Sage", label: "Sage", swatch: "oklch(0.625 0.050 132)" },
+  { value: "Indigo", label: "Indigo", swatch: "oklch(0.575 0.135 268)" },
+  { value: "Clay", label: "Clay", swatch: "oklch(0.635 0.115 46)" },
+  { value: "Plum", label: "Plum", swatch: "oklch(0.560 0.130 332)" },
+];
+const VOICES: { value: string; label: string }[] = [
+  { value: "", label: "Serif" },
+  { value: "Modern", label: "Modern" },
+  { value: "Mono", label: "Mono" },
+];
+
+// A theme choice mirrored to an attribute on <html> and to localStorage. The
+// inline script in the root layout has already applied the saved value before
+// paint, so mounting only adopts what is there; the attribute and storage are
+// written when the user actually picks something.
+function useThemeAttr(name: "accent" | "voice") {
+  const [value, setValue] = useState("");
+  useEffect(() => {
+    // Starts empty so server and first client render match.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setValue(document.documentElement.getAttribute(`data-${name}`) ?? "");
+  }, [name]);
+  function choose(next: string) {
+    setValue(next);
+    if (next) {
+      document.documentElement.setAttribute(`data-${name}`, next);
+      localStorage.setItem(name, next);
+    } else {
+      document.documentElement.removeAttribute(`data-${name}`);
+      localStorage.removeItem(name);
+    }
+  }
+  return [value, choose] as const;
+}
+
 /* ---------- task ---------- */
 type Task = { msId?: string; name: string; time: string; done: boolean; starred: boolean };
+
+// Tasks that come back from Microsoft To Do carry no time of day. They hold
+// this placeholder, which the UI leaves blank rather than printing.
+const NO_TIME = "--:--";
 
 /* ---------- habits ---------- */
 // frequency: days of week (0=Sun..6=Sat) the habit is scheduled on; empty = not scheduled on any day
@@ -138,94 +201,14 @@ function focusLevel(minutes: number): number {
   return 4;
 }
 
-function CheckIcon() {
+// The one empty state every card and screen uses: it keeps the layout still
+// and says why the space is quiet.
+function EmptyState({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <svg viewBox="0 0 24 24">
-      <path d="M4 12l5 5L20 6" />
-    </svg>
-  );
-}
-
-function PlayIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor">
-      <path d="M7 5v14l12-7z" />
-    </svg>
-  );
-}
-
-function PauseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor">
-      <rect x="6" y="5" width="4" height="14" rx="1" />
-      <rect x="14" y="5" width="4" height="14" rx="1" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3.5 2" />
-    </svg>
-  );
-}
-
-function TimerIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="10" y1="2" x2="14" y2="2" />
-      <line x1="12" y1="14" x2="12" y2="10" />
-      <circle cx="12" cy="14" r="8" />
-    </svg>
-  );
-}
-
-function PinIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: "rotate(45deg)" }}>
-      <line x1="12" y1="17" x2="12" y2="22" />
-      <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
-    </svg>
-  );
-}
-
-function PinOffIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: "rotate(45deg)" }}>
-      <line x1="12" y1="17" x2="12" y2="22" />
-      <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
-      <line x1="2" y1="12" x2="22" y2="12" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-      <path d="M10 11v6M14 11v6" />
-      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-    </svg>
-  );
-}
-
-function PencilIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
-  );
-}
-
-function PaperclipIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-    </svg>
+    <div className="empty">
+      <span className="empty-icon">{icon}</span>
+      <span>{children}</span>
+    </div>
   );
 }
 
@@ -255,8 +238,8 @@ export default function Dashboard({
   // which stays in sync — without any server round-trip.
   const router = useRouter();
   const searchParams = useSearchParams();
-  const screen = (searchParams.get("screen") ?? "home") as "home" | "tasks" | "habits" | "tracker" | "notes" | "pomodoro" | "settings";
-  function setScreen(s: "home" | "tasks" | "habits" | "tracker" | "notes" | "pomodoro" | "settings") {
+  const screen = (searchParams.get("screen") ?? "home") as Screen;
+  function setScreen(s: Screen) {
     const params = new URLSearchParams(searchParams.toString());
     if (s === "home") params.delete("screen");
     else params.set("screen", s);
@@ -346,6 +329,38 @@ export default function Dashboard({
     document.documentElement.setAttribute("data-glass", glass ? "on" : "");
     localStorage.setItem("glass", String(glass));
   }, [glass]);
+
+  /* ---------- accent + voice ---------- */
+  const [accent, setAccent] = useThemeAttr("accent");
+  const [voice, setVoice] = useThemeAttr("voice");
+
+  /* ---------- account menu ---------- */
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function onPointerDown(e: MouseEvent) {
+      if (!userMenuRef.current?.contains(e.target as Node)) setUserMenuOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setUserMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [userMenuOpen]);
+  // Up to two initials from the name, falling back to the email's first letter.
+  const initials =
+    (profileName.trim() || email)
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase() || "?";
 
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
@@ -487,7 +502,7 @@ export default function Dashboard({
         setTasks(remoteTasks.map((rt) => ({
           msId: rt.id,
           name: rt.name,
-          time: "--:--",
+          time: NO_TIME,
           done: rt.done,
           starred: rt.pinned,
         })));
@@ -710,6 +725,15 @@ export default function Dashboard({
     }
     return days;
   }, [trackerToday]);
+
+  // The table runs oldest to newest, so on a narrow screen today starts off
+  // the right-hand edge. Open the tracker scrolled to it.
+  const trackerWrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (screen !== "tracker") return;
+    const wrap = trackerWrapRef.current;
+    if (wrap) wrap.scrollLeft = wrap.scrollWidth;
+  }, [screen]);
 
   /* ---------- habits screen: add habit ---------- */
   const [habitAdding, setHabitAdding] = useState(false);
@@ -1145,6 +1169,9 @@ export default function Dashboard({
   const nextUpCountdownMin = nextUpEvent
     ? Math.ceil(((nextUpInProgress ? nextUpEndSec : nextUpStartSec) - nowTotalSec) / 60)
     : 0;
+  // The one card that carries the shadow: Next up while there is still an
+  // event left today, otherwise the calendar.
+  const nextUpLive = !!nextUpEvent && nextUpEvent.dayOffset === 0;
   const nextUpProgressPct = nextUpInProgress
     ? Math.min(100, Math.max(0, ((nowTotalSec - nextUpStartSec) / (nextUpEndSec - nextUpStartSec)) * 100))
     : 0;
@@ -1160,96 +1187,105 @@ export default function Dashboard({
             <span>system</span>
           </div>
         </div>
-        <nav className="screen-nav">
-          <button
-            className={"screen-nav-btn" + (screen === "home" ? " active" : "")}
-            onClick={() => setScreen("home")}
-          >
-            Home
-          </button>
-          <span className="screen-nav-sep">|</span>
-          <button
-            className={"screen-nav-btn" + (screen === "tasks" ? " active" : "")}
-            onClick={() => setScreen("tasks")}
-          >
-            Tasks
-          </button>
-          <span className="screen-nav-sep">|</span>
-          <button
-            className={"screen-nav-btn" + (screen === "habits" ? " active" : "")}
-            onClick={() => setScreen("habits")}
-          >
-            Habits
-          </button>
-          <span className="screen-nav-sep">|</span>
-          <button
-            className={"screen-nav-btn" + (screen === "tracker" ? " active" : "")}
-            onClick={() => setScreen("tracker")}
-          >
-            Tracker
-          </button>
-          <span className="screen-nav-sep">|</span>
-          <button
-            className={"screen-nav-btn" + (screen === "pomodoro" ? " active" : "")}
-            onClick={() => setScreen("pomodoro")}
-          >
-            Pomodoro
-          </button>
-          <span className="screen-nav-sep">|</span>
-          <button
-            className={"screen-nav-btn" + (screen === "notes" ? " active" : "")}
-            onClick={() => setScreen("notes")}
-          >
-            Notes
-          </button>
+        <nav className="screen-nav" aria-label="Screens">
+          {NAV.map(({ key, label }) => {
+            // The tracker is a view of Habits, so Habits stays lit for both.
+            const active = screen === key || (key === "habits" && screen === "tracker");
+            return (
+              <button
+                key={key}
+                className={"screen-nav-btn" + (active ? " active" : "")}
+                aria-current={active ? "page" : undefined}
+                onClick={() => setScreen(key)}
+              >
+                {label}
+              </button>
+            );
+          })}
         </nav>
-        <div style={{ justifySelf: "end", display: "flex", alignItems: "center", gap: "16px" }}>
+        <div className="topbar-user" ref={userMenuRef}>
           <button
-            className="dark-toggle"
-            onClick={() => setScreen("settings")}
-            aria-label="Settings"
-            title="Settings"
+            className={"avatar-btn" + (screen === "settings" ? " active" : "")}
+            aria-label="Account menu"
+            aria-haspopup="menu"
+            aria-expanded={userMenuOpen}
+            onClick={() => setUserMenuOpen((o) => !o)}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
+            {initials}
           </button>
+          {userMenuOpen && (
+            <div className="user-menu" role="menu">
+              <div className="user-menu-head">
+                <div className="user-menu-name">{profileName.trim() || "Your account"}</div>
+                <div className="user-menu-email">{email}</div>
+              </div>
+              <button
+                className="user-menu-item"
+                role="menuitem"
+                onClick={() => { setUserMenuOpen(false); setScreen("settings"); }}
+              >
+                <GearIcon />
+                Settings
+              </button>
+              <form action={signOut}>
+                <button className="user-menu-item" role="menuitem" type="submit">
+                  <SignOutIcon />
+                  Sign out
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       </header>
 
       {screen === "home" ? (
         <div className="grid">
           {/* ===== LEFT ===== */}
-          <div className="col">
+          <div className="col col-left">
             <div className="card stack-todo">
               <div className="card-head">
-                <div className="card-title">To-Do List</div>
-                {microsoftConnected && <span className="tag plain"><span className="num">{doneCount}/{starredTasks.length}</span></span>}
+                <div className="card-heading">
+                  <div className="card-eyebrow">To-do</div>
+                </div>
+                {microsoftConnected && starredTasks.length > 0 && (
+                  <div className="card-meta">
+                    <b className="num">{doneCount}</b> of <span className="num">{starredTasks.length}</span> done
+                  </div>
+                )}
               </div>
               {microsoftConnected ? (
                 <>
-                  <div className="todo-prog">
-                    <div className="bar"><i style={{ width: `${progressPct}%` }} /></div>
-                  </div>
-                  <div className="todo-list">
-                    {starredTasks.map((t, i) => (
-                      <div
-                        key={i}
-                        className={"todo-item" + (t.done ? " done" : "")}
-                        onClick={() => toggleTask(tasks.indexOf(t))}
-                      >
-                        <span className="check"><CheckIcon /></span>
-                        <span className="name">{t.name}</span>
-                        <span className="time">{t.time}</span>
+                  {starredTasks.length > 0 ? (
+                    <>
+                      <div className="todo-prog">
+                        <div className="bar"><i style={{ width: `${progressPct}%` }} /></div>
                       </div>
-                    ))}
-                  </div>
+                      <div className="todo-list">
+                        {starredTasks.map((t, i) => (
+                          <div
+                            key={i}
+                            className={"todo-item" + (t.done ? " done" : "")}
+                            onClick={() => toggleTask(tasks.indexOf(t))}
+                          >
+                            <span className="check"><CheckIcon /></span>
+                            <span className="name">{t.name}</span>
+                            {t.time !== NO_TIME && <span className="time">{t.time}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <EmptyState icon={<PinIcon />}>
+                      Nothing pinned. Add a task below, or pin one from{" "}
+                      <button className="link-btn" onClick={() => setScreen("tasks")}>Tasks</button>.
+                    </EmptyState>
+                  )}
                   {adding ? (
                     <input
                       ref={addInputRef}
                       className="add-input"
                       placeholder="Task name, then Enter…"
+                      aria-label="New task"
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       onKeyDown={(e) => {
@@ -1260,9 +1296,7 @@ export default function Dashboard({
                     />
                   ) : (
                     <button className="add-task" onClick={() => setAdding(true)}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                        <path d="M12 5v14M5 12h14" />
-                      </svg>
+                      <PlusIcon />
                       Add task
                     </button>
                   )}
@@ -1270,13 +1304,8 @@ export default function Dashboard({
               ) : (
                 <div className="todo-connect-prompt">
                   <p className="todo-connect-msg">Connect Microsoft To Do to manage your tasks — they&apos;ll sync across all your devices.</p>
-                  <a href="/auth/microsoft" className="ms-connect-btn">
-                    <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                      <rect x="1" y="1" width="10" height="10" fill="#f25022"/>
-                      <rect x="13" y="1" width="10" height="10" fill="#7fba00"/>
-                      <rect x="1" y="13" width="10" height="10" fill="#00a4ef"/>
-                      <rect x="13" y="13" width="10" height="10" fill="#ffb900"/>
-                    </svg>
+                  <a href="/auth/microsoft" className="connect-btn">
+                    <MicrosoftLogo />
                     Connect Microsoft To Do
                   </a>
                 </div>
@@ -1285,9 +1314,16 @@ export default function Dashboard({
 
             <div className="card stack-note">
               <div className="card-head">
-                <span className="tag rose">Quick Note</span>
+                <div className="card-heading">
+                  <div className="card-eyebrow rose">Quick note</div>
+                </div>
+                {activeNote && <div className="card-meta num">{formatNoteTimestamp(activeNote.updatedAt)}</div>}
               </div>
-              <p className="note-body">{activeNote?.body || "No notes yet — capture one below."}</p>
+              {activeNote?.body ? (
+                <p className="note-body">{activeNote.body}</p>
+              ) : (
+                <p className="note-body note-empty">No notes yet — capture one below.</p>
+              )}
               {(activeNote?.images.length || capturePreviews.length) ? (
                 <div className="note-card-images">
                   {activeNote?.images.map((img) => (
@@ -1308,6 +1344,7 @@ export default function Dashboard({
                   ref={captureRef}
                   rows={1}
                   placeholder="Capture a thought…"
+                  aria-label="Capture a thought"
                   value={capture}
                   onChange={(e) => setCapture(e.target.value)}
                   onKeyDown={onCaptureKeyDown}
@@ -1328,49 +1365,65 @@ export default function Dashboard({
           </div>
 
           {/* ===== CENTER ===== */}
-          <div className="col">
+          <div className="col col-center">
             <div className="clockblock stack-clock">
               <div className="bigclock">{clockStr}<span className="sec">:{secStr}</span></div>
               <div className="bigdate">{dateStr}</div>
             </div>
 
-            {googleConnected && nextUpEvent && (
-              <div className="card stack-next-up">
-                <div className="card-head">
-                  <div className="next-up-head-left">
-                    <div className="card-title">Next Up</div>
-                    <span className="next-up-head-divider" />
-                    <span className="next-up-title-inline">{nextUpEvent.title}</span>
-                  </div>
-                  <span className="tag num">{nextUpInProgress ? "Now" : formatDurationMin(nextUpCountdownMin)}</span>
-                </div>
-                <div className="next-up-meta">
-                  <span className="next-up-meta-item">
-                    <ClockIcon />
-                    {nextUpEvent.dayOffset === 1 ? "Tomorrow · " : ""}{nextUpEvent.start} → {nextUpEvent.end}
-                  </span>
-                  <span className="next-up-meta-sep" />
-                  <span className="next-up-meta-item">
-                    <TimerIcon />
-                    {formatDurationMin(nextUpEvent.endMin - nextUpEvent.startMin)}
-                  </span>
-                </div>
-                <div className="next-up-track">
-                  <div className="next-up-track-row">
-                    <span className="next-up-track-label num">Now {clockStr}</span>
-                    <span className="next-up-track-mid">
-                      {nextUpInProgress ? `Ends in ${formatDurationMin(nextUpCountdownMin)}` : `Starts in ${formatDurationMin(nextUpCountdownMin)}`}
-                    </span>
-                    <span className="next-up-track-label num">{nextUpEvent.end}</span>
-                  </div>
-                  <div className="bar next-up-track-bar"><i style={{ width: `${nextUpProgressPct}%` }} /></div>
-                </div>
+            {/* Stays mounted whenever the calendar is connected, so the cards
+                below it don't jump when the day's last event passes. */}
+            {googleConnected && calState !== "disconnected" && (
+              <div className={"card stack-next-up" + (nextUpLive ? " primary" : "")}>
+                {nextUpEvent ? (
+                  <>
+                    <div className="card-head">
+                      <div className="card-heading">
+                        <div className="card-eyebrow">
+                          Next up ·{" "}
+                          <span className="num">
+                            {nextUpInProgress
+                              ? `now, ends in ${formatDurationMin(nextUpCountdownMin)}`
+                              : `starts in ${formatDurationMin(nextUpCountdownMin)}`}
+                          </span>
+                        </div>
+                        <div className="card-title next-up-title">{nextUpEvent.title}</div>
+                      </div>
+                      <div className="card-meta num">
+                        {nextUpEvent.dayOffset === 1 ? "Tomorrow · " : ""}{nextUpEvent.start} → {nextUpEvent.end}
+                      </div>
+                    </div>
+                    <div className="next-up-track">
+                      <div className="next-up-track-row">
+                        <span className="next-up-track-label num">Now {clockStr}</span>
+                        <span className="next-up-track-label num">
+                          {formatDurationMin(nextUpEvent.endMin - nextUpEvent.startMin)} · ends {nextUpEvent.end}
+                        </span>
+                      </div>
+                      <div className="bar next-up-track-bar"><i style={{ width: `${nextUpProgressPct}%` }} /></div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="card-head">
+                      <div className="card-heading">
+                        <div className="card-eyebrow">Next up</div>
+                      </div>
+                    </div>
+                    <EmptyState icon={<ClockIcon />}>
+                      {upNextEvents === null ? "Checking your calendar…" : "Nothing scheduled today or tomorrow."}
+                    </EmptyState>
+                  </>
+                )}
               </div>
             )}
 
-            <div className="card stack-calendar">
-              <div className="cal-head">
-                <div className="m">{calLabel}</div>
+            <div className={"card stack-calendar" + (nextUpLive ? "" : " primary")}>
+              <div className="card-head">
+                <div className="card-heading">
+                  <div className="card-eyebrow">Calendar</div>
+                  <div className="card-title">{calLabel}</div>
+                </div>
                 <div className="cal-nav">
                   <a
                     href="https://calendar.google.com"
@@ -1378,12 +1431,9 @@ export default function Dashboard({
                     rel="noopener noreferrer"
                     className="cal-open-btn"
                     title="Open Google Calendar"
+                    aria-label="Open Google Calendar"
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                      <polyline points="15 3 21 3 21 9" />
-                      <line x1="10" y1="14" x2="21" y2="3" />
-                    </svg>
+                    <ExternalLinkIcon />
                   </a>
                   {!calIsToday && (
                     <button
@@ -1402,13 +1452,8 @@ export default function Dashboard({
                 </div>
               </div>
               {calState === "disconnected" ? (
-                <a href="/auth/google" className="ms-connect-btn" style={{ marginTop: 0 }}>
-                  <svg viewBox="0 0 24 24" width="14" height="14">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.43.34-2.1V7.06H2.18A11 11 0 0 0 1 12c0 1.78.43 3.45 1.18 4.94l3.66-2.84z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/>
-                  </svg>
+                <a href="/auth/google" className="connect-btn">
+                  <GoogleLogo />
                   {googleConnected ? "Reconnect Google Calendar" : "Connect Google Calendar"}
                 </a>
               ) : (
@@ -1421,6 +1466,7 @@ export default function Dashboard({
                         <button
                           key={i}
                           className={"cal-week-day" + (selected ? " selected" : "") + (isToday ? " is-today" : "")}
+                          aria-pressed={selected}
                           onClick={() => {
                             const next = new Date(d);
                             next.setHours(0, 0, 0, 0);
@@ -1441,6 +1487,7 @@ export default function Dashboard({
                     </div>
                   )}
                   <div className={"cal-timeline" + (calState === "loading" ? " loading" : "")}>
+                    <div className="cal-timeline-inner">
                     {Array.from({ length: calEndHour - calStartHour + 1 }, (_, i) => {
                       const h = calStartHour + i;
                       return (
@@ -1461,15 +1508,16 @@ export default function Dashboard({
                     })()}
                     {timedEvents.map((ev) => {
                       const top = (ev.startMin - calStartHour * 60) * CAL_PX_PER_MIN;
-                      const height = Math.max((ev.endMin - ev.startMin) * CAL_PX_PER_MIN, 22);
+                      const height = Math.max((ev.endMin - ev.startMin) * CAL_PX_PER_MIN, 24);
                       return (
                         <div key={ev.id} className="cal-block" style={{ top: `${top}px`, height: `${height}px` }} title={`${ev.title} · ${ev.start} – ${ev.end}`}>
                           <span className="cal-block-title">{ev.title}</span>
-                          {height > 34 && <span className="cal-block-time num">{ev.start} – {ev.end}</span>}
+                          {height > 38 && <span className="cal-block-time num">{ev.start} – {ev.end}</span>}
                         </div>
                       );
                     })}
                     <div style={{ height: `${(calEndHour - calStartHour) * 60 * CAL_PX_PER_MIN + 14}px` }} />
+                    </div>
                   </div>
                   {calState === "ok" && timedEvents.length === 0 && allDayEvents.length === 0 && (
                     <p className="cal-empty">No events — clear runway.</p>
@@ -1480,56 +1528,80 @@ export default function Dashboard({
           </div>
 
           {/* ===== RIGHT ===== */}
-          <div className="col">
-            <div className="card habits-card stack-habits">
+          <div className="col col-right">
+            <div className="card stack-habits">
               <div className="card-head">
-                <div className="card-title">Habits</div>
-                <span className="tag plain">{habitsDone}/{habitsToday.length} · {habitsPct}%</span>
-              </div>
-
-              <div className="habits-score">
-                <div className="habits-score-badge">{habitsDone}</div>
-                <div className="habits-score-mid">
-                  <div className="habits-score-label">Daily score · resets 00:00</div>
-                  <div className="habits-score-msg">
-                    {habitsDone === 0 ? "Start with one." : `${habitsDone} done — keep going.`}
+                <div className="card-heading">
+                  <div className="card-eyebrow">Habits</div>
+                </div>
+                {now && habitsToday.length > 0 && (
+                  <div className="card-meta">
+                    <b className="num">{habitsDone}</b> of <span className="num">{habitsToday.length}</span> · <span className="num">{habitsPct}%</span>
                   </div>
-                </div>
-                <div className="habits-score-bar">
-                  <i style={{ width: `${habitsPct}%` }} />
-                </div>
+                )}
               </div>
 
-              <div className="habits-grid">
-                {habits.map((hb) => {
-                  if (!hb.frequency.includes(todayDow)) return null;
-                  return (
-                    <div
-                      key={hb.id}
-                      className={"habit-card" + (hb.done ? " done" : "")}
-                      onClick={() => toggleHabit(hb.id)}
-                    >
-                      <span className="habit-check" />
-                      <div className="habit-info">
-                        <div className="habit-name">{hb.name}</div>
-                      </div>
-                      <div className="habit-strk">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-                        </svg>
-                        {hb.strk}
+              {/* Which habits are due depends on the weekday, which is only
+                  known once the clock has mounted — so nothing is drawn (and
+                  no empty state flashes) before then. */}
+              {!now ? null : habitsToday.length > 0 ? (
+                <>
+                  <div className="habits-score">
+                    <div className="habits-score-badge num">{habitsDone}</div>
+                    <div className="habits-score-mid">
+                      <div className="habits-score-label">Daily score · resets 00:00</div>
+                      <div className="habits-score-msg">
+                        {habitsDone === 0 ? "Start with one." : `${habitsDone} done — keep going.`}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="habits-score-bar">
+                      <i style={{ width: `${habitsPct}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="habits-grid">
+                    {habitsToday.map((hb) => (
+                      <div
+                        key={hb.id}
+                        className={"habit-card" + (hb.done ? " done" : "")}
+                        onClick={() => toggleHabit(hb.id)}
+                      >
+                        <span className="habit-check" />
+                        <div className="habit-info">
+                          <div className="habit-name">{hb.name}</div>
+                        </div>
+                        <div className="habit-strk">
+                          <FlameIcon />
+                          {hb.strk}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <EmptyState icon={<FlameIcon />}>
+                  {habits.length === 0 ? (
+                    <>
+                      No habits yet.{" "}
+                      <button className="link-btn" onClick={() => setScreen("habits")}>Add one</button>
+                    </>
+                  ) : (
+                    <>
+                      Nothing scheduled for {DAYS[todayDow]}.{" "}
+                      <button className="link-btn" onClick={() => setScreen("habits")}>Edit schedule</button>
+                    </>
+                  )}
+                </EmptyState>
+              )}
             </div>
 
             <div className="card stack-activity">
               <div className="card-head">
-                <div className="card-title">Activity</div>
+                <div className="card-heading">
+                  <div className="card-eyebrow">Activity</div>
+                </div>
                 <div className="heat-nav">
-                  <span className="tag plain"><b style={{ color: "var(--ink-2)", fontWeight: 600 }} className="num">{Math.round(heatTotalMin / 60)}</b> hrs</span>
+                  <span className="card-meta"><b className="num">{Math.round(heatTotalMin / 60)}</b> hrs</span>
                   <button type="button" aria-label="Earlier weeks" disabled={!heatCanPrev} onClick={() => setHeatPage((p) => p + 1)}>‹</button>
                   <button type="button" aria-label="Later weeks" disabled={heatPage === 0} onClick={() => setHeatPage((p) => Math.max(0, p - 1))}>›</button>
                 </div>
@@ -1554,48 +1626,33 @@ export default function Dashboard({
         </div>
       ) : screen === "tasks" ? (
         /* ===== TASKS SCREEN ===== */
-        <div className="tasks-screen">
+        <div className="page">
           {!microsoftConnected ? (
             <div className="tasks-connect-wall">
               <div className="tasks-connect-inner">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="40" height="40" style={{ opacity: 0.35 }}>
-                  <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                </svg>
+                <ChecklistIcon />
                 <h2 className="tasks-connect-title">Tasks require Microsoft To Do</h2>
                 <p className="tasks-connect-msg">Your tasks are stored in Microsoft To Do and sync across all your devices. Connect your account to get started.</p>
-                <a href="/auth/microsoft" className="ms-connect-btn">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                    <rect x="1" y="1" width="10" height="10" fill="#f25022"/>
-                    <rect x="13" y="1" width="10" height="10" fill="#7fba00"/>
-                    <rect x="1" y="13" width="10" height="10" fill="#00a4ef"/>
-                    <rect x="13" y="13" width="10" height="10" fill="#ffb900"/>
-                  </svg>
+                <a href="/auth/microsoft" className="connect-btn">
+                  <MicrosoftLogo />
                   Connect Microsoft To Do
                 </a>
               </div>
             </div>
           ) : (
           <>
-          <div className="tasks-header">
+          <div className="page-header">
             <div>
-              <h1 className="tasks-title">All Tasks</h1>
-              <p className="tasks-sub">{tasks.length} tasks · {tasks.filter(t => t.starred).length} pinned to To-Do</p>
+              <h1 className="page-title">All Tasks</h1>
+              <p className="page-sub">{tasks.length} tasks · {tasks.filter(t => t.starred).length} pinned to To-Do</p>
             </div>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <span className="ms-connect-btn connected" style={{ marginTop: 0 }}>
-                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                  <rect x="1" y="1" width="10" height="10" fill="#f25022"/>
-                  <rect x="13" y="1" width="10" height="10" fill="#7fba00"/>
-                  <rect x="1" y="13" width="10" height="10" fill="#00a4ef"/>
-                  <rect x="13" y="13" width="10" height="10" fill="#ffb900"/>
-                </svg>
+            <div className="page-actions">
+              <span className="connect-btn connected">
+                <MicrosoftLogo />
                 Microsoft To Do connected
               </span>
-              <span className={"ms-sync-btn" + (syncStatus === "success" ? " success" : syncStatus === "error" ? " error" : "")}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13" className={syncing ? "spin" : ""}>
-                  <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-                  <path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-                </svg>
+              <span className={"sync-chip" + (syncStatus === "success" ? " success" : syncStatus === "error" ? " error" : "")}>
+                <SyncIcon className={syncing ? "spin" : ""} />
                 {syncing ? "Syncing…" : syncStatus === "success" ? "Synced!" : syncStatus === "error" ? "Sync failed" : "Auto-sync on"}
               </span>
               <button className={"add-task tasks-add-btn" + (tasksAdding ? " cancelling" : "")} onClick={() => { setTasksAdding((v) => !v); setTasksDraft(""); }}>
@@ -1603,9 +1660,7 @@ export default function Dashboard({
                   "Cancel"
                 ) : (
                   <>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                      <path d="M12 5v14M5 12h14" />
-                    </svg>
+                    <PlusIcon />
                     New task
                   </>
                 )}
@@ -1639,7 +1694,7 @@ export default function Dashboard({
                 ) : (
                   <span className="tasks-name" onClick={() => startRename(i)} title="Click to rename">{t.name}</span>
                 )}
-                <span className="tasks-time num">{t.time}</span>
+                <span className="tasks-time num">{t.time !== NO_TIME ? t.time : ""}</span>
                 {isPinned ? (
                   <button
                     className="tasks-pin tasks-unpin"
@@ -1726,108 +1781,203 @@ export default function Dashboard({
         </div>
       ) : null}
 
-      {screen === "habits" && (
-        /* ===== HABITS SCREEN ===== */
-        <div className="tasks-screen">
-          <div className="tasks-header">
+      {(screen === "habits" || screen === "tracker") && (
+        /* ===== HABITS SCREEN: list and 30-day tracker are two views of it ===== */
+        <div className="page wide">
+          <div className="page-header">
             <div>
-              <h1 className="tasks-title">All Habits</h1>
-              <p className="tasks-sub">{habits.length} habits · {habitsToday.length} scheduled today</p>
+              <h1 className="page-title">Habits</h1>
+              <p className="page-sub">
+                {screen === "habits"
+                  ? `${habits.length} habits · ${habitsToday.length} scheduled today`
+                  : `${habits.length} habits · last ${TRACKER_DAYS} days`}
+              </p>
             </div>
-            <button className="add-task tasks-add-btn" onClick={() => setHabitAdding(true)}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              New habit
-            </button>
+            <div className="page-actions">
+              <div className="subtabs" role="tablist" aria-label="Habits view">
+                <button
+                  role="tab"
+                  aria-selected={screen === "habits"}
+                  className={"subtab" + (screen === "habits" ? " active" : "")}
+                  onClick={() => setScreen("habits")}
+                >
+                  List
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={screen === "tracker"}
+                  className={"subtab" + (screen === "tracker" ? " active" : "")}
+                  onClick={() => setScreen("tracker")}
+                >
+                  Tracker
+                </button>
+              </div>
+              {/* Shown in both views so the view switch beside it never moves. */}
+              <button
+                className="add-task tasks-add-btn"
+                onClick={() => { setScreen("habits"); setHabitAdding(true); }}
+              >
+                <PlusIcon />
+                New habit
+              </button>
+            </div>
           </div>
 
-          <div className="tasks-list-full">
-            {habitAdding && (
-              <div className="habit-row habit-row-adding">
-                <input
-                  ref={habitAddInputRef}
-                  className="add-input"
-                  placeholder="Habit name, then Enter…"
-                  value={habitDraft}
-                  onChange={(e) => setHabitDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") finishHabitAdd(true);
-                    if (e.key === "Escape") finishHabitAdd(false);
-                  }}
-                />
-                <div className="freq-picker">
-                  {DAY_LETTERS.map((l, d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      className={"freq-day" + (habitDraftFreq.includes(d) ? " active" : "")}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => toggleDraftFreqDay(d)}
-                    >
-                      {l}
-                    </button>
+          {screen === "habits" ? (
+            <div className="tasks-list-full">
+              {habitAdding && (
+                <div className="habit-row habit-row-adding">
+                  <input
+                    ref={habitAddInputRef}
+                    className="add-input"
+                    placeholder="Habit name, then Enter…"
+                    aria-label="Habit name"
+                    value={habitDraft}
+                    onChange={(e) => setHabitDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") finishHabitAdd(true);
+                      if (e.key === "Escape") finishHabitAdd(false);
+                    }}
+                  />
+                  <div className="freq-picker">
+                    {DAY_LETTERS.map((l, d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        className={"freq-day" + (habitDraftFreq.includes(d) ? " active" : "")}
+                        aria-label={DAYS[d]}
+                        aria-pressed={habitDraftFreq.includes(d)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => toggleDraftFreqDay(d)}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="add-task" onMouseDown={(e) => e.preventDefault()} onClick={() => finishHabitAdd(true)}>
+                    Add
+                  </button>
+                  <button className="habit-cancel" onMouseDown={(e) => e.preventDefault()} onClick={() => finishHabitAdd(false)}>
+                    Cancel
+                  </button>
+                </div>
+              )}
+              {habits.length === 0 && !habitAdding && (
+                <EmptyState icon={<FlameIcon />}>
+                  No habits yet. Add your first with New habit, then pick the days it runs on.
+                </EmptyState>
+              )}
+              {habits.map((hb) => (
+                <div key={hb.id} className="habit-row">
+                  <div className="habit-row-info">
+                    <div className="tasks-name">{hb.name}</div>
+                  </div>
+                  <div className="freq-picker">
+                    {DAY_LETTERS.map((l, d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        className={"freq-day" + (hb.frequency.includes(d) ? " active" : "")}
+                        aria-label={DAYS[d]}
+                        aria-pressed={hb.frequency.includes(d)}
+                        onClick={() => toggleHabitFreqDay(hb.id, d)}
+                        title={hb.frequency.length === 0 ? "Not scheduled on any day" : undefined}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="habit-strk">
+                    <FlameIcon />
+                    {hb.strk}
+                  </div>
+                  <button className="tasks-delete" onClick={() => deleteHabit(hb.id)} aria-label="Delete habit">
+                    <TrashIcon />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="tracker-table-wrap" ref={trackerWrapRef}>
+              <table className="tracker-table">
+                <thead>
+                  <tr>
+                    <th className="tracker-name-col" />
+                    {trackerDays.map((d) => (
+                      <th key={d.key} className={"tracker-th" + (d.isToday ? " today" : "")}>
+                        {DAY_LETTERS[d.dow]}
+                      </th>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th className="tracker-name-col">Habit</th>
+                    {trackerDays.map((d) => (
+                      <th key={d.key} className={"tracker-th tracker-th-num" + (d.isToday ? " today" : "")}>
+                        {d.dayNum}
+                        {d.monthLabel && <span className="tracker-month-tag">{d.monthLabel}</span>}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {habits.map((hb) => (
+                    <tr key={hb.id}>
+                      <td className="tracker-name-col">{hb.name}</td>
+                      {trackerDays.map((d) => {
+                        const before = d.key < hb.createdAt;
+                        const done = habitCompletions.has(`${hb.id}|${d.key}`);
+                        const clickable = d.isToday && !before;
+                        return (
+                          <td
+                            key={d.key}
+                            className={
+                              "tracker-cell" +
+                              (before ? " before" : "") +
+                              (done ? " done" : "") +
+                              (d.isToday ? " today" : "") +
+                              (clickable ? " clickable" : "")
+                            }
+                            onClick={clickable ? () => toggleHabit(hb.id) : undefined}
+                            title={before ? "Not tracked yet" : d.key}
+                          >
+                            {!before && <span className="tracker-dot" />}
+                          </td>
+                        );
+                      })}
+                    </tr>
                   ))}
-                </div>
-                <button className="add-task" style={{ width: "auto" }} onMouseDown={(e) => e.preventDefault()} onClick={() => finishHabitAdd(true)}>
-                  Add
-                </button>
-                <button className="habit-cancel" onMouseDown={(e) => e.preventDefault()} onClick={() => finishHabitAdd(false)}>
-                  Cancel
-                </button>
-              </div>
-            )}
-            {habits.map((hb) => (
-              <div key={hb.id} className="habit-row">
-                <div className="habit-row-info">
-                  <div className="tasks-name">{hb.name}</div>
-                </div>
-                <div className="freq-picker">
-                  {DAY_LETTERS.map((l, d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      className={"freq-day" + (hb.frequency.includes(d) ? " active" : "")}
-                      onClick={() => toggleHabitFreqDay(hb.id, d)}
-                      title={hb.frequency.length === 0 ? "Not scheduled on any day" : undefined}
-                    >
-                      {l}
-                    </button>
-                  ))}
-                </div>
-                <div className="habit-strk">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-                  </svg>
-                  {hb.strk}
-                </div>
-                <button className="tasks-delete" onClick={() => deleteHabit(hb.id)} aria-label="Delete habit">
-                  <TrashIcon />
-                </button>
-              </div>
-            ))}
-          </div>
+                  {habits.length === 0 && (
+                    <tr>
+                      <td className="tracker-empty" colSpan={TRACKER_DAYS + 1}>
+                        No habits yet. Add one from the List view.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
       {screen === "notes" && (
         /* ===== NOTES SCREEN ===== */
-        <div className="tasks-screen">
-          <div className="tasks-header">
+        <div className="page wide">
+          <div className="page-header">
             <div>
-              <h1 className="tasks-title">Notes</h1>
-              <p className="tasks-sub">{notes.length} note{notes.length === 1 ? "" : "s"}</p>
+              <h1 className="page-title">Notes</h1>
+              <p className="page-sub">{notes.length} note{notes.length === 1 ? "" : "s"}</p>
             </div>
             <button className="add-task tasks-add-btn" onClick={handleNewNoteCard}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
+              <PlusIcon />
               New note
             </button>
           </div>
 
           {notes.length === 0 ? (
-            <p className="tasks-sub">No notes yet — capture one from the home screen or click &ldquo;New note&rdquo;.</p>
+            <EmptyState icon={<NoteIcon />}>
+              No notes yet. Capture one from the home screen, or start one here with New note.
+            </EmptyState>
           ) : (
             <div className="notes-grid">
               {notes.map((n) => (
@@ -1889,77 +2039,6 @@ export default function Dashboard({
         </div>
       )}
 
-      {screen === "tracker" && (
-        /* ===== HABIT TRACKER SCREEN ===== */
-        <div className="tracker-screen">
-          <div className="tasks-header">
-            <div>
-              <h1 className="tasks-title">Habit Tracker</h1>
-              <p className="tasks-sub">{habits.length} habits · last {TRACKER_DAYS} days</p>
-            </div>
-          </div>
-
-          <div className="tracker-table-wrap">
-            <table className="tracker-table">
-              <thead>
-                <tr>
-                  <th className="tracker-name-col" />
-                  {trackerDays.map((d) => (
-                    <th key={d.key} className={"tracker-th" + (d.isToday ? " today" : "")}>
-                      {DAY_LETTERS[d.dow]}
-                    </th>
-                  ))}
-                </tr>
-                <tr>
-                  <th className="tracker-name-col">Habit</th>
-                  {trackerDays.map((d) => (
-                    <th key={d.key} className={"tracker-th tracker-th-num" + (d.isToday ? " today" : "")}>
-                      {d.dayNum}
-                      {d.monthLabel && <span className="tracker-month-tag">{d.monthLabel}</span>}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {habits.map((hb) => (
-                  <tr key={hb.id}>
-                    <td className="tracker-name-col">{hb.name}</td>
-                    {trackerDays.map((d) => {
-                      const before = d.key < hb.createdAt;
-                      const done = habitCompletions.has(`${hb.id}|${d.key}`);
-                      const clickable = d.isToday && !before;
-                      return (
-                        <td
-                          key={d.key}
-                          className={
-                            "tracker-cell" +
-                            (before ? " before" : "") +
-                            (done ? " done" : "") +
-                            (d.isToday ? " today" : "") +
-                            (clickable ? " clickable" : "")
-                          }
-                          onClick={clickable ? () => toggleHabit(hb.id) : undefined}
-                          title={before ? "Not tracked yet" : d.key}
-                        >
-                          {!before && <span className="tracker-dot" />}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-                {habits.length === 0 && (
-                  <tr>
-                    <td className="tracker-empty" colSpan={TRACKER_DAYS + 1}>
-                      No habits yet — add one from the Habits tab.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
       {screen === "pomodoro" && (
         <>
           {pomoPickerOpen && !pomoRunning && (
@@ -1995,7 +2074,7 @@ export default function Dashboard({
           <div className="pomo-page">
             <div className="pomo-page-body">
               <div className="pomo-page-ring">
-                <svg width={POMO_SIZE} height={POMO_SIZE}>
+                <svg width={POMO_SIZE} height={POMO_SIZE} viewBox={`0 0 ${POMO_SIZE} ${POMO_SIZE}`} aria-hidden="true">
                   <circle cx={POMO_CX} cy={POMO_CX} r={POMO_R} fill="none" stroke="oklch(var(--tint) / 0.08)" strokeWidth="4" />
                   <circle
                     cx={POMO_CX} cy={POMO_CX} r={POMO_R} fill="none" stroke="var(--sage)" strokeWidth="4"
@@ -2008,56 +2087,6 @@ export default function Dashboard({
                   <div className="pomo-page-time num">{pomoTime}</div>
                   {pomoPhase === "focus" && pomoTaskChosen && pomoTaskName && (
                     <div className="pomo-page-task-label">{pomoTaskName}</div>
-                  )}
-                </div>
-                <div className="pomo-ring-settings-wrap">
-                  <button
-                    className={"pomo-ring-settings-btn" + (pomoSettingsOpen ? " active" : "")}
-                    aria-label="Timer settings" title="Timer settings"
-                    disabled={pomoRunning}
-                    onClick={() => { setPomoSettingsOpen(o => !o); setPomoCustomInput(""); }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                    </svg>
-                  </button>
-                  {pomoSettingsOpen && (
-                    <div className="pomo-settings">
-                      <div className="pomo-settings-label">Duration (min)</div>
-                      <div className="pomo-settings-presets">
-                        {[5, 10, 15, 20, 25, 30, 45, 60].map(m => (
-                          <button
-                            key={m}
-                            className={"pomo-settings-preset" + (pomoMinutes === m && !pomoCustomInput ? " active" : "")}
-                            onClick={() => applyPomoMinutes(m)}
-                          >
-                            {m}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="pomo-settings-custom">
-                        <input
-                          className="pomo-settings-input"
-                          type="number" min="1" max="240" placeholder="Custom"
-                          value={pomoCustomInput}
-                          onChange={e => setPomoCustomInput(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === "Enter") {
-                              const v = parseInt(pomoCustomInput);
-                              if (v >= 1 && v <= 240) applyPomoMinutes(v);
-                            }
-                          }}
-                        />
-                        <button
-                          className="pomo-settings-apply"
-                          disabled={!pomoCustomInput || parseInt(pomoCustomInput) < 1 || parseInt(pomoCustomInput) > 240}
-                          onClick={() => { const v = parseInt(pomoCustomInput); if (v >= 1 && v <= 240) applyPomoMinutes(v); }}
-                        >
-                          Apply
-                        </button>
-                      </div>
-                    </div>
                   )}
                 </div>
               </div>
@@ -2139,9 +2168,7 @@ export default function Dashboard({
                 <div className="pomo-btn-wrap" style={{ flex: 1 }}>
                   {!pomoTaskChosen ? (
                     <button className="pbtn-main pomo-page-btn" onClick={() => setPomoPickerOpen(true)}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-                        <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                      </svg>
+                      <ChecklistIcon />
                       Select a task
                     </button>
                   ) : (
@@ -2155,16 +2182,10 @@ export default function Dashboard({
                   )}
                 </div>
                 <button className="pbtn-reset pomo-page-reset" aria-label="Skip to end" title="Skip to end" disabled={pomoRemain === POMO_TOTAL} onClick={completeCurrentPhase}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="5 4 15 12 5 20 5 4" />
-                    <line x1="19" y1="5" x2="19" y2="19" />
-                  </svg>
+                  <SkipIcon />
                 </button>
                 <button className="pbtn-reset pomo-page-reset" aria-label="Reset" disabled={pomoRemain === POMO_TOTAL} onClick={resetPomo}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 4v6h6" />
-                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                  </svg>
+                  <ResetIcon />
                 </button>
                 <button
                   className={"pbtn-reset pomo-page-reset" + (pomoSettingsOpen ? " active" : "")}
@@ -2172,10 +2193,7 @@ export default function Dashboard({
                   disabled={pomoRunning}
                   onClick={() => { setPomoSettingsOpen(o => !o); setPomoCustomInput(""); }}
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                  </svg>
+                  <GearIcon />
                 </button>
               </div>
             </div>
@@ -2257,16 +2275,9 @@ export default function Dashboard({
                     disabled={pomoHistoryLoadingMore}
                   >
                     <span className="pomo-tl-load-inner">
-                      <svg
-                        viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                        width="12" height="12"
-                        className={pomoHistoryLoadingMore ? "spin" : "pomo-tl-load-chevron"}
-                      >
-                        {pomoHistoryLoadingMore
-                          ? <path d="M21 12a9 9 0 1 1-6.2-8.5" />
-                          : <path d="M6 9l6 6 6-6" />}
-                      </svg>
+                      {pomoHistoryLoadingMore
+                        ? <SpinnerIcon className="spin" />
+                        : <ChevronDownIcon className="pomo-tl-load-chevron" />}
                       {pomoHistoryLoadingMore ? "Loading" : "Load earlier days"}
                     </span>
                   </button>
@@ -2278,18 +2289,20 @@ export default function Dashboard({
       )}
 
       {screen === "settings" && (
-        <div className="settings-screen">
-          <div className="settings-header">
-            <h1 className="settings-title">Settings</h1>
-            <p className="settings-sub">Account, appearance, and connected services.</p>
+        <div className="page narrow">
+          <div className="page-header">
+            <div>
+              <h1 className="page-title">Settings</h1>
+              <p className="page-sub">Account, appearance, and connected services.</p>
+            </div>
           </div>
 
           <div className="settings-section">
             <h2 className="settings-section-title">Account</h2>
             <div className="settings-row">
-              <div>
+              <div className="settings-row-text">
                 <div className="settings-row-label">Name</div>
-                <div className="settings-row-desc">Shown on your profile and to-do widget.</div>
+                <div className="settings-row-desc">Shown in your account menu.</div>
               </div>
               <div className="settings-row-control">
                 <input
@@ -2309,7 +2322,7 @@ export default function Dashboard({
               </div>
             </div>
             <div className="settings-row">
-              <div>
+              <div className="settings-row-text">
                 <div className="settings-row-label">Email</div>
                 <div className="settings-row-desc">Used to sign in — managed by your account provider.</div>
               </div>
@@ -2318,7 +2331,7 @@ export default function Dashboard({
               </div>
             </div>
             <div className="settings-row">
-              <div>
+              <div className="settings-row-text">
                 <div className="settings-row-label">Password</div>
                 <div className="settings-row-desc">
                   {passwordError ? <span className="settings-row-error">{passwordError}</span> : "Update the password used to sign in."}
@@ -2348,7 +2361,7 @@ export default function Dashboard({
           <div className="settings-section">
             <h2 className="settings-section-title">Appearance</h2>
             <div className="settings-row">
-              <div>
+              <div className="settings-row-text">
                 <div className="settings-row-label">Dark mode</div>
                 <div className="settings-row-desc">Switch the whole dashboard to a darker palette.</div>
               </div>
@@ -2363,7 +2376,7 @@ export default function Dashboard({
               </div>
             </div>
             <div className="settings-row">
-              <div>
+              <div className="settings-row-text">
                 <div className="settings-row-label">Glass mode</div>
                 <div className="settings-row-desc">Adds a frosted, translucent look to cards.</div>
               </div>
@@ -2377,48 +2390,91 @@ export default function Dashboard({
                 </button>
               </div>
             </div>
+            <div className="settings-row">
+              <div className="settings-row-text">
+                <div className="settings-row-label">Accent</div>
+                <div className="settings-row-desc">Colour for progress, tags and the timer. Auto is sage in light mode and blue in dark mode.</div>
+              </div>
+              <div className="settings-row-control">
+                <div className="seg" role="radiogroup" aria-label="Accent">
+                  {ACCENTS.map((a) => (
+                    <button
+                      key={a.label}
+                      role="radio"
+                      aria-checked={accent === a.value}
+                      className={"seg-btn" + (accent === a.value ? " active" : "")}
+                      onClick={() => setAccent(a.value)}
+                    >
+                      {a.swatch && <i className="seg-swatch" style={{ background: a.swatch }} />}
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="settings-row">
+              <div className="settings-row-text">
+                <div className="settings-row-label">Voice</div>
+                <div className="settings-row-desc">The typeface for the clock, the timer and titles.</div>
+              </div>
+              <div className="settings-row-control">
+                <div className="seg" role="radiogroup" aria-label="Voice">
+                  {VOICES.map((v) => (
+                    <button
+                      key={v.label}
+                      role="radio"
+                      aria-checked={voice === v.value}
+                      className={"seg-btn" + (voice === v.value ? " active" : "")}
+                      onClick={() => setVoice(v.value)}
+                    >
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="settings-section">
             <h2 className="settings-section-title">Integrations</h2>
             <div className="settings-row">
-              <div>
+              <div className="settings-row-text">
                 <div className="settings-row-label">Microsoft To Do</div>
                 <div className="settings-row-desc">Powers the Tasks screen and home to-do widget.</div>
               </div>
               <div className="settings-row-control">
                 {microsoftConnected ? (
                   <>
-                    <span className="ms-connect-btn connected" style={{ marginTop: 0 }}>Connected</span>
+                    <span className="connect-btn connected">Connected</span>
                     <button className="settings-disconnect-btn" onClick={handleDisconnectMicrosoft}>Disconnect</button>
                   </>
                 ) : (
-                  <a href="/auth/microsoft" className="ms-connect-btn" style={{ marginTop: 0 }}>Connect</a>
+                  <a href="/auth/microsoft" className="connect-btn">Connect</a>
                 )}
               </div>
             </div>
             <div className="settings-row">
-              <div>
+              <div className="settings-row-text">
                 <div className="settings-row-label">Google Calendar</div>
                 <div className="settings-row-desc">Powers the calendar widget on the home screen.</div>
               </div>
               <div className="settings-row-control">
                 {googleConnected ? (
                   <>
-                    <span className="ms-connect-btn connected" style={{ marginTop: 0 }}>Connected</span>
+                    <span className="connect-btn connected">Connected</span>
                     <button className="settings-disconnect-btn" onClick={handleDisconnectGoogle}>Disconnect</button>
                   </>
                 ) : (
-                  <a href="/auth/google" className="ms-connect-btn" style={{ marginTop: 0 }}>Connect</a>
+                  <a href="/auth/google" className="connect-btn">Connect</a>
                 )}
               </div>
             </div>
           </div>
 
           <div className="settings-section">
-            <h2 className="settings-section-title">Pomodoro</h2>
+            <h2 className="settings-section-title">Focus timer</h2>
             <div className="settings-row">
-              <div>
+              <div className="settings-row-text">
                 <div className="settings-row-label">Notify when a timer ends</div>
                 <div className="settings-row-desc">Show a browser notification when a focus session or break finishes.</div>
               </div>
@@ -2433,7 +2489,7 @@ export default function Dashboard({
               </div>
             </div>
             <div className="settings-row">
-              <div>
+              <div className="settings-row-text">
                 <div className="settings-row-label">Auto-start next phase</div>
                 <div className="settings-row-desc">When a timer ends, automatically start the next phase instead of pausing.</div>
               </div>
