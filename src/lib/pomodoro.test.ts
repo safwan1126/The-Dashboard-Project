@@ -23,6 +23,7 @@ describe("parsePomoState", () => {
       face: "ring",
       color: "",
       ringWidth: DEFAULT_RING_WIDTH,
+      backdrop: "glow",
     });
   });
 
@@ -82,6 +83,7 @@ describe("parsePomoState", () => {
       face: "flip",
       color: "Clay",
       ringWidth: 12,
+      backdrop: "tide",
     };
     const raw = serializePomoState(state, now);
     expect(parsePomoState(raw, now)).toEqual(state);
@@ -103,8 +105,8 @@ describe("parsePomoState", () => {
     expect(width("thick")).toBe(DEFAULT_RING_WIDTH);
   });
 
-  it("falls back to the defaults for a face or colour it does not recognise", () => {
-    const raw = JSON.stringify({ face: "hourglass", color: "Chartreuse" });
-    expect(parsePomoState(raw)).toMatchObject({ face: "ring", color: "" });
+  it("falls back to the defaults for a face, colour or backdrop it does not recognise", () => {
+    const raw = JSON.stringify({ face: "hourglass", color: "Chartreuse", backdrop: "lava" });
+    expect(parsePomoState(raw)).toMatchObject({ face: "ring", color: "", backdrop: "glow" });
   });
 });

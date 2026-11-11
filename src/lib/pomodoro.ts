@@ -21,6 +21,11 @@ export const RING_WIDTH_MIN = 2;
 export const RING_WIDTH_MAX = 20;
 export const DEFAULT_RING_WIDTH = 4;
 
+// What sits behind the timer in fullscreen. "glow" is the soft wash fullscreen
+// shipped with, so it stays the default.
+export const POMO_BACKDROPS = ["plain", "glow", "aurora", "horizon", "tide", "dots"] as const;
+export type PomoBackdrop = (typeof POMO_BACKDROPS)[number];
+
 export const POMO_COLORS = ["", "Sage", "Indigo", "Clay", "Plum", "Ink"] as const;
 export type PomoColor = (typeof POMO_COLORS)[number];
 
@@ -37,6 +42,7 @@ export type PomoState = {
   face: PomoFace;
   color: PomoColor;
   ringWidth: number;
+  backdrop: PomoBackdrop;
 };
 
 type StoredPomo = {
@@ -50,6 +56,7 @@ type StoredPomo = {
   face?: string;
   color?: string;
   ringWidth?: number;
+  backdrop?: string;
   // Absolute epoch ms when a running timer hits zero; lets us recompute the
   // remaining seconds against the current clock instead of freezing.
   endsAt?: number | null;
@@ -67,6 +74,7 @@ function defaultState(): PomoState {
     face: "ring",
     color: "",
     ringWidth: DEFAULT_RING_WIDTH,
+    backdrop: "glow",
   };
 }
 
@@ -99,6 +107,7 @@ export function parsePomoState(raw: string | undefined | null, now = Date.now())
   // falls back to the default rather than reaching the UI.
   const face = POMO_FACES.find((f) => f === s.face) ?? "ring";
   const color = POMO_COLORS.find((c) => c === s.color) ?? "";
+  const backdrop = POMO_BACKDROPS.find((b) => b === s.backdrop) ?? "glow";
   const ringWidth =
     typeof s.ringWidth === "number" && Number.isFinite(s.ringWidth)
       ? Math.min(RING_WIDTH_MAX, Math.max(RING_WIDTH_MIN, Math.round(s.ringWidth)))
@@ -119,7 +128,7 @@ export function parsePomoState(raw: string | undefined | null, now = Date.now())
     remain = s.remain;
   }
 
-  return { minutes, breakMinutes, phase, remain, running, taskName, taskChosen, face, color, ringWidth };
+  return { minutes, breakMinutes, phase, remain, running, taskName, taskChosen, face, color, ringWidth, backdrop };
 }
 
 // Serialize live state for the cookie, anchoring a running timer to an absolute
@@ -136,6 +145,7 @@ export function serializePomoState(s: PomoState, now = Date.now()): string {
     face: s.face,
     color: s.color,
     ringWidth: s.ringWidth,
+    backdrop: s.backdrop,
     endsAt: s.running ? now + s.remain * 1000 : null,
   };
   return JSON.stringify(stored);

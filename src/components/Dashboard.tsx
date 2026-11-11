@@ -27,8 +27,9 @@ import {
 import { createSingleFlight } from "@/lib/singleFlight";
 import {
   POMO_COOKIE, RING_WIDTH_MAX, RING_WIDTH_MIN, serializePomoState,
-  type PomoState, type PomoPhase, type PomoFace, type PomoColor,
+  type PomoState, type PomoPhase, type PomoFace, type PomoColor, type PomoBackdrop,
 } from "@/lib/pomodoro";
+import { FULLSCREEN_EVENTS, enterFullscreen, fullscreenElement, leaveFullscreen } from "@/lib/fullscreen";
 import TimerFace from "./TimerFace";
 import { updateProfileName, changePassword, disconnectMicrosoft, disconnectGoogle } from "@/lib/settings/actions";
 import { signOut } from "@/app/auth/actions";
@@ -117,6 +118,17 @@ const TIMER_COLORS: { value: PomoColor; label: string; swatch?: string }[] = [
   { value: "Clay", label: "Clay", swatch: "oklch(0.635 0.115 46)" },
   { value: "Plum", label: "Plum", swatch: "oklch(0.560 0.130 332)" },
   { value: "Ink", label: "Ink", swatch: "var(--ink)" },
+];
+
+// What sits behind the timer in fullscreen (the .backdrop-art rules in
+// globals.css). Horizon and Tide move with the session's progress.
+const TIMER_BACKDROPS: { value: PomoBackdrop; label: string }[] = [
+  { value: "plain", label: "Plain" },
+  { value: "glow", label: "Glow" },
+  { value: "aurora", label: "Aurora" },
+  { value: "horizon", label: "Horizon" },
+  { value: "tide", label: "Tide" },
+  { value: "dots", label: "Dots" },
 ];
 
 // A theme choice mirrored to an attribute on <html> and to localStorage. The
@@ -1000,6 +1012,7 @@ export default function Dashboard({
   const [pomoFace, setPomoFace] = useState<PomoFace>(initialPomo.face);
   const [pomoColor, setPomoColor] = useState<PomoColor>(initialPomo.color);
   const [pomoRingWidth, setPomoRingWidth] = useState(initialPomo.ringWidth);
+  const [pomoBackdrop, setPomoBackdrop] = useState<PomoBackdrop>(initialPomo.backdrop);
   const [pomoPickerOpen, setPomoPickerOpen] = useState(false);
   const [pomoHistory, setPomoHistory] = useState<PomoSession[]>([]);
   const [pomoHistoryDays, setPomoHistoryDays] = useState(14);
@@ -1126,24 +1139,28 @@ export default function Dashboard({
       face: pomoFace,
       color: pomoColor,
       ringWidth: pomoRingWidth,
+      backdrop: pomoBackdrop,
     }));
     document.cookie = `${POMO_COOKIE}=${value}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
-  }, [pomoMinutes, pomoBreakMinutes, pomoPhase, pomoRemain, pomoRunning, pomoTaskName, pomoTaskChosen, pomoFace, pomoColor, pomoRingWidth]);
+  }, [pomoMinutes, pomoBreakMinutes, pomoPhase, pomoRemain, pomoRunning, pomoTaskName, pomoTaskChosen, pomoFace, pomoColor, pomoRingWidth, pomoBackdrop]);
+
+  // Share of the current phase that has elapsed, 0 to 1.
+  const pomoElapsed = POMO_TOTAL > 0 ? Math.min(1, Math.max(0, 1 - pomoRemain / POMO_TOTAL)) : 0;
 
   /* ---------- pomodoro: fullscreen ---------- */
-  // "Immersive" is the in-page takeover: the timer covers the whole window.
-  // On top of that the browser's real fullscreen is requested where it exists.
-  // Phones and embedded views often refuse it, in which case the in-page
-  // version alone still does the job.
+  // "Immersive" is the in-page takeover: the timer covers the whole window,
+  // and it is the part that always works. On top of it the browser's real
+  // fullscreen is requested where there is one to ask for. iPhones have none,
+  // and any browser may refuse, so nothing below depends on it being granted.
   const [pomoImmersive, setPomoImmersive] = useState(false);
 
   function enterPomoImmersive() {
     setPomoImmersive(true);
-    document.documentElement.requestFullscreen?.().catch(() => {});
+    enterFullscreen();
   }
   function exitPomoImmersive() {
     setPomoImmersive(false);
-    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    leaveFullscreen();
   }
 
   useEffect(() => {
@@ -1153,22 +1170,26 @@ export default function Dashboard({
     if (screen !== "pomodoro") {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPomoImmersive(false);
-      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      leaveFullscreen();
       return;
     }
-    // Esc inside real fullscreen is taken by the browser and only shows up as
-    // a fullscreenchange; without real fullscreen it arrives as a keydown.
+    // Esc inside real fullscreen is taken by the browser, and on an iPad the
+    // way out is Safari's own close button or a swipe. Both only show up as a
+    // fullscreen change. Without real fullscreen, Esc arrives as a keydown.
     function onFullscreenChange() {
-      if (!document.fullscreenElement) setPomoImmersive(false);
+      if (!fullscreenElement()) setPomoImmersive(false);
     }
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && !document.fullscreenElement) setPomoImmersive(false);
+      if (e.key === "Escape" && !fullscreenElement()) setPomoImmersive(false);
     }
-    document.addEventListener("fullscreenchange", onFullscreenChange);
+    FULLSCREEN_EVENTS.forEach((name) => document.addEventListener(name, onFullscreenChange));
     document.addEventListener("keydown", onKeyDown);
+    // The page underneath must not scroll or rubber-band behind the timer.
+    document.documentElement.classList.add("timer-immersive");
     return () => {
-      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      FULLSCREEN_EVENTS.forEach((name) => document.removeEventListener(name, onFullscreenChange));
       document.removeEventListener("keydown", onKeyDown);
+      document.documentElement.classList.remove("timer-immersive");
     };
   }, [pomoImmersive, screen]);
 
@@ -2152,7 +2173,13 @@ export default function Dashboard({
             className={"pomo-page" + (pomoImmersive ? " immersive" : "")}
             data-phase={pomoPhase}
             data-timer-color={pomoColor || undefined}
+            // How far through the phase we are, 0 to 1, for the backdrops
+            // that move with it.
+            style={{ "--elapsed": pomoElapsed } as React.CSSProperties}
           >
+            {pomoImmersive && (
+              <div className="pomo-backdrop backdrop-art" data-backdrop={pomoBackdrop} aria-hidden="true" />
+            )}
             <button
               className="pomo-fs-btn"
               aria-label={pomoImmersive ? "Exit fullscreen" : "Fullscreen"}
@@ -2297,6 +2324,23 @@ export default function Dashboard({
                           >
                             {c.swatch ? null : "App"}
                           </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="pomo-display-row">
+                      <span className="pomo-display-name">Fullscreen backdrop</span>
+                      <div className="backdrop-thumbs" role="radiogroup" aria-label="Fullscreen backdrop">
+                        {TIMER_BACKDROPS.map((b) => (
+                          <button
+                            key={b.value}
+                            role="radio"
+                            aria-checked={pomoBackdrop === b.value}
+                            aria-label={b.label}
+                            title={b.label}
+                            className={"backdrop-thumb backdrop-art" + (pomoBackdrop === b.value ? " active" : "")}
+                            data-backdrop={b.value}
+                            onClick={() => setPomoBackdrop(b.value)}
+                          />
                         ))}
                       </div>
                     </div>

@@ -77,6 +77,17 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
+/* The root needs a background of its own. Safari's built-in stylesheet paints
+   a fullscreen page white, and without this that white shows wherever the
+   body does not reach: past the ends when the page rubber-bands, and around
+   the safe areas on an iPad. Worst in Charcoal, where it is the only white on
+   screen. The !important rules are for the fullscreen state itself; they are
+   written apart so a browser that does not know one selector keeps the other. */
+html { background: var(--paper); }
+html:fullscreen { background-color: var(--paper) !important; }
+html:-webkit-full-screen { background-color: var(--paper) !important; }
+/* While the timer has the window, the page behind it stays put. */
+html.timer-immersive, html.timer-immersive body { overflow: hidden; }
 body {
   font-family: var(--sans);
   font-size: var(--t-base);
@@ -239,6 +250,13 @@ html[data-glass="on"][data-mood="Charcoal"] .card { border: 1px solid oklch(1 0 
 /* Glass · light. The backdrop is mixed from the accent so it follows it. */
 html[data-glass="on"]:not([data-mood="Charcoal"]) { --card: oklch(1 0 0 / 0.55); }
 html[data-glass="on"]:not([data-mood="Charcoal"]) body::before {
+  /* Fallback for browsers without color-mix(): the sage version, whatever the
+     accent. A declaration the browser cannot parse is dropped whole, so this
+     has to come first rather than be mixed into the one below. */
+  background:
+    radial-gradient(at 18% 12%, oklch(0.88 0.060 132 / 0.55), transparent 46%),
+    radial-gradient(at 82% 8%, oklch(0.90 0.050 120 / 0.45), transparent 48%),
+    radial-gradient(at 65% 92%, oklch(0.89 0.055 145 / 0.42), transparent 50%);
   background:
     radial-gradient(at 18% 12%, color-mix(in oklch, var(--sage-soft) 60%, transparent), transparent 46%),
     radial-gradient(at 82% 8%, color-mix(in oklch, var(--sage-faint) 85%, transparent), transparent 48%),
@@ -886,13 +904,19 @@ html[data-mood="Charcoal"] .pomo-page { --flip-bg: var(--sage-faint); --flip-fg:
 .pomo-fs-btn:hover { background: oklch(var(--tint) / 0.04); color: var(--ink); }
 .pomo-fs-btn svg { width: 16px; height: 16px; }
 /* The timer takes over the window: nav and history are covered, the faces
-   grow, and a wash of the timer's colour sits behind them. */
+   grow, and a backdrop of the user's choosing sits behind them. The overlay
+   itself is always solid paper, so it covers the page even if the backdrop
+   cannot be drawn. */
 .pomo-page.immersive {
   position: fixed; inset: 0; z-index: 90; overflow-y: auto;
-  padding: var(--s-8) var(--gutter);
-  background:
-    radial-gradient(ellipse 80% 60% at 50% 42%, color-mix(in oklch, var(--sage-faint) 85%, transparent), transparent 72%),
-    var(--paper);
+  overscroll-behavior: contain;
+  /* env() is zero unless the page is laid out under a notch or home bar. */
+  padding:
+    max(var(--s-8), env(safe-area-inset-top, 0px))
+    max(var(--gutter), env(safe-area-inset-right, 0px))
+    max(var(--s-8), env(safe-area-inset-bottom, 0px))
+    max(var(--gutter), env(safe-area-inset-left, 0px));
+  background: var(--paper);
   --ring: min(620px, 84vw, 66vh);
   --flip-h: min(300px, 21vw, 38vh);
   --digits: min(360px, 26vw, 44vh);
@@ -900,12 +924,114 @@ html[data-mood="Charcoal"] .pomo-page { --flip-bg: var(--sage-faint); --flip-fg:
 }
 /* Auto margins centre the timer when it fits and still let it scroll when a
    short window (or the open settings panel) makes it taller than the screen. */
-.pomo-page.immersive .pomo-page-body { flex: none; margin: auto 0; }
-.pomo-page.immersive .pomo-fs-btn { position: fixed; top: var(--s-5); right: var(--gutter); z-index: 91; }
+.pomo-page.immersive .pomo-page-body { position: relative; z-index: 1; flex: none; margin: auto 0; }
+.pomo-page.immersive .pomo-fs-btn {
+  position: fixed; z-index: 91;
+  top: max(var(--s-5), env(safe-area-inset-top, 0px));
+  right: max(var(--gutter), env(safe-area-inset-right, 0px));
+  background: var(--card);
+}
+/* Small labels sit on tinted backdrops here, so they take the darker ink. */
+.pomo-page.immersive .pomo-page-mode,
+.pomo-page.immersive .pomo-page-task-label { color: var(--ink-2); }
+
+/* ---- fullscreen backdrops ---- */
+/* Each backdrop is drawn from the timer's own colour ramp with plain
+   gradients fading to transparent and an opacity on the layer. No color-mix()
+   and no filters, so they render the same in every browser the app supports
+   and stay cheap enough for a tablet. The same rules draw the full-size
+   backdrop and the thumbnails in the settings panel.
+
+   --elapsed (0 to 1) is set on .pomo-page; Horizon and Tide move with it. */
+.backdrop-art { position: relative; overflow: hidden; background: var(--paper); }
+.backdrop-art::before, .backdrop-art::after { content: ""; position: absolute; pointer-events: none; }
+.pomo-backdrop { position: fixed; inset: 0; z-index: 0; --sun: min(18vw, 26vh); --dot-gap: 26px; }
+
+/* Glow: a soft wash of the timer's colour behind the face. */
+.backdrop-art[data-backdrop="glow"]::before {
+  inset: 0; opacity: 0.5;
+  background: radial-gradient(ellipse 72% 58% at 50% 44%, var(--sage-soft), transparent 72%);
+}
+
+/* Aurora: two oversized layers of colour drifting slowly past each other. */
+.backdrop-art[data-backdrop="aurora"]::before {
+  inset: -40%; opacity: 0.5;
+  background:
+    radial-gradient(circle at 30% 36%, var(--sage-soft), transparent 36%),
+    radial-gradient(circle at 70% 30%, var(--rose-soft), transparent 32%),
+    radial-gradient(circle at 56% 72%, var(--sage), transparent 30%);
+  animation: aurora-a 46s ease-in-out infinite alternate;
+}
+.backdrop-art[data-backdrop="aurora"]::after {
+  inset: -40%; opacity: 0.75;
+  background:
+    radial-gradient(circle at 68% 66%, var(--sage-faint), transparent 38%),
+    radial-gradient(circle at 28% 68%, var(--rose-faint), transparent 32%);
+  animation: aurora-b 62s ease-in-out infinite alternate;
+}
+@keyframes aurora-a {
+  from { transform: rotate(-8deg) translate(-3%, -2%) scale(1); }
+  to   { transform: rotate(10deg) translate(4%, 3%) scale(1.12); }
+}
+@keyframes aurora-b {
+  from { transform: rotate(6deg) translate(3%, 2%) scale(1.1); }
+  to   { transform: rotate(-12deg) translate(-4%, -3%) scale(1); }
+}
+
+/* Horizon: a low sun off to one side that sets over the course of the phase,
+   sinking behind the land as the time runs out. It sits clear of the face so
+   it never reads as a second ring, and takes the progress colour, so it is
+   rose on a break. */
+.backdrop-art[data-backdrop="horizon"] {
+  background: linear-gradient(to bottom, var(--paper) 0%, var(--paper) 34%, var(--sage-faint) 78%);
+}
+.backdrop-art[data-backdrop="horizon"]::before {
+  left: 84%; top: calc(14% + var(--elapsed, 0.4) * 68%);
+  width: var(--sun, 30%); aspect-ratio: 1; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--timer-mark, var(--sage)); opacity: 0.42;
+  transition: top 1s linear, background .3s;
+}
+.backdrop-art[data-backdrop="horizon"]::after {
+  left: 0; right: 0; bottom: 0; height: 22%;
+  background: linear-gradient(to bottom, var(--sage-soft), var(--sage-faint));
+  border-top: 1px solid oklch(var(--tint) / 0.10);
+}
+
+/* Tide: the screen fills from the bottom as the phase goes by, with a slow
+   swell along the waterline. */
+.backdrop-art[data-backdrop="tide"]::before {
+  left: 0; right: 0; bottom: 0; height: calc(5% + var(--elapsed, 0.4) * 95%);
+  background: linear-gradient(to top, var(--sage-soft), var(--sage-faint));
+  transition: height 1s linear;
+}
+.backdrop-art[data-backdrop="tide"]::after {
+  left: -60%; width: 220%; height: 8%;
+  bottom: calc(1% + var(--elapsed, 0.4) * 95%);
+  border-radius: 50%; background: var(--sage-faint);
+  animation: tide-swell 14s ease-in-out infinite alternate;
+  transition: bottom 1s linear;
+}
+@keyframes tide-swell {
+  from { transform: translateX(-5%) rotate(-0.7deg); }
+  to   { transform: translateX(5%) rotate(0.7deg); }
+}
+
+/* Dots: a quiet grid in the timer's colour, cleared around the face. */
+.backdrop-art[data-backdrop="dots"]::before {
+  inset: 0; opacity: 0.5;
+  background-image: radial-gradient(circle, var(--sage) 1.2px, transparent 1.7px);
+  background-size: var(--dot-gap, 26px) var(--dot-gap, 26px);
+  background-position: center;
+}
+.backdrop-art[data-backdrop="dots"]::after {
+  inset: 0;
+  background: radial-gradient(ellipse 62% 58% at 50% 46%, var(--paper) 30%, transparent 78%);
+}
 
 /* ---- face: ring ---- */
-/* The ring is a size container, so its label, time and task scale with it. */
-.pomo-page-ring { position: relative; width: var(--ring); margin-bottom: var(--s-8); container-type: inline-size; }
+/* The label, time and task are each a share of the ring's width. */
+.pomo-page-ring { position: relative; width: var(--ring); margin-bottom: var(--s-8); }
 .pomo-page-ring svg { display: block; width: 100%; height: auto; }
 .timer-ring-mark { stroke: var(--timer-mark); transition: stroke .3s; }
 .pomo-page-center {
@@ -914,13 +1040,13 @@ html[data-mood="Charcoal"] .pomo-page { --flip-bg: var(--sage-faint); --flip-fg:
   width: 76%; text-align: center; pointer-events: none;
 }
 .pomo-page-mode { font-size: var(--t-sm); font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); margin-bottom: var(--s-2); }
-.pomo-page-ring .pomo-page-mode { font-size: clamp(11px, 3.7cqi, 22px); }
-.pomo-page-time { font-family: var(--serif); font-size: 22cqi; font-weight: 500; letter-spacing: 0.01em; color: var(--ink); line-height: 1; }
+.pomo-page-ring .pomo-page-mode { font-size: clamp(11px, calc(var(--ring) * 0.037), 22px); }
+.pomo-page-time { font-family: var(--serif); font-size: calc(var(--ring) * 0.22); font-weight: 500; letter-spacing: 0.01em; color: var(--ink); line-height: 1; }
 .pomo-page-task-label {
   font-size: var(--t-base); line-height: 1.4; color: var(--ink-3); margin-top: var(--s-3);
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
-.pomo-page-ring .pomo-page-task-label { font-size: clamp(13px, 4.1cqi, 24px); }
+.pomo-page-ring .pomo-page-task-label { font-size: clamp(13px, calc(var(--ring) * 0.041), 24px); }
 
 /* ---- faces: flip and digits ---- */
 .timer-face {
@@ -966,15 +1092,16 @@ html[data-mood="Charcoal"] .pomo-page { --flip-bg: var(--sage-faint); --flip-fg:
 .flip-half {
   position: absolute; left: 0; right: 0; height: 50%;
   overflow: hidden; background: var(--flip-bg);
-  backface-visibility: hidden; transition: background .3s, color .3s;
+  -webkit-backface-visibility: hidden; backface-visibility: hidden;
+  transition: background .3s, color .3s;
 }
 .flip-half > span { display: block; height: var(--flip-h); line-height: var(--flip-h); text-align: center; }
 .flip-top { top: 0; border-radius: calc(var(--flip-h) * 0.08) calc(var(--flip-h) * 0.08) 0 0; }
 .flip-bottom { bottom: 0; border-radius: 0 0 calc(var(--flip-h) * 0.08) calc(var(--flip-h) * 0.08); }
 .flip-bottom > span { margin-top: calc(var(--flip-h) / -2); }
 /* The old top half falls forward, then the new bottom half lands. */
-.flip-flap-top { z-index: 2; transform-origin: 50% 100%; animation: flip-top .26s ease-in forwards; }
-.flip-flap-bottom { z-index: 2; transform-origin: 50% 0; transform: rotateX(90deg); animation: flip-bottom .26s ease-out .26s forwards; }
+.flip-flap-top { z-index: 2; transform-origin: 50% 100%; will-change: transform; animation: flip-top .26s ease-in forwards; }
+.flip-flap-bottom { z-index: 2; transform-origin: 50% 0; transform: rotateX(90deg); will-change: transform; animation: flip-bottom .26s ease-out .26s forwards; }
 @keyframes flip-top { to { transform: rotateX(-90deg); } }
 @keyframes flip-bottom { from { transform: rotateX(90deg); } to { transform: rotateX(0deg); } }
 .flip-colon { display: flex; flex-direction: column; gap: calc(var(--flip-h) * 0.16); }
@@ -1038,6 +1165,16 @@ html[data-mood="Charcoal"] .pomo-page { --flip-bg: var(--sage-faint); --flip-fg:
 .pomo-display-name { font-size: var(--t-sm); font-weight: 600; color: var(--ink-2); }
 /* A native slider, tinted with the timer's colour. */
 .range { flex: 0 1 180px; min-width: 120px; height: 22px; margin: 0; accent-color: var(--sage-deep); cursor: pointer; }
+/* The backdrop picker: each tile is the backdrop itself, drawn small and held
+   still. */
+.backdrop-thumbs { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.backdrop-thumb {
+  width: 44px; height: 30px; border: none; padding: 0; cursor: pointer;
+  border-radius: var(--radius-xs); box-shadow: 0 0 0 1px var(--line);
+  transition: box-shadow .15s; --sun: 30%; --dot-gap: 7px;
+}
+.backdrop-thumb.active { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--ink-2); }
+.backdrop-thumb::before, .backdrop-thumb::after { animation: none !important; transition: none !important; }
 .swatches { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-3); }
 .swatch {
   width: 22px; height: 22px; border-radius: 50%; border: none; padding: 0; cursor: pointer;

@@ -248,6 +248,7 @@ The Dashboard Project/
       │  ├─ fetchTasks.ts      # Read tasks from the "LifeOS" To Do list
       │  └─ syncTasks.ts       # Push local task changes to Microsoft To Do
       ├─ settings/actions.ts   # Server Actions: update name, disconnect integrations
+      ├─ fullscreen.ts         # Fullscreen API wrapper that also speaks WebKit's prefixed one
       └─ pomodoro.ts           # Pure helpers for (de)serializing timer state to a cookie
 ```
 
@@ -623,14 +624,28 @@ completes, it auto-starts a break; when the break completes, it resets to focus.
     `.pomo-page` element. It reuses the app's accent ramps scoped to that one
     element (see the theming section), plus a monochrome `Ink`. Unset means
     "match the app". On a break the progress mark turns rose in every colour.
-  All three are stored in the `pomodoro` cookie alongside the timer, for the same
+  - *Fullscreen backdrop* — what sits behind the timer in fullscreen: Plain,
+    Glow (the default), Aurora (slowly drifting colour), Horizon (a sun that
+    sets as the phase runs out), Tide (the screen fills as it does) or Dots.
+    All are drawn from the timer's colour ramp in `.backdrop-art` rules, and
+    the same rules draw the thumbnails in the picker. `.pomo-page` exposes the
+    phase's progress as `--elapsed` (0 to 1) for the two that move with it.
+  All four are stored in the `pomodoro` cookie alongside the timer, for the same
   reason the timer is: the server can then render the chosen face directly.
   `parsePomoState` falls back to the defaults for any value it doesn't know.
 - **Fullscreen** (the button at the top right of the screen) makes the timer
   take over the window: `.pomo-page.immersive` is a fixed overlay with larger
-  faces. The browser's real fullscreen is requested on top where it exists, and
-  a screen wake lock is held while a fullscreen timer is running; both are
-  best-effort and the overlay works without them. Esc exits.
+  faces, and the page behind it is locked so it cannot scroll. The browser's
+  real fullscreen is requested on top through `lib/fullscreen.ts`, which also
+  speaks WebKit's prefixed API for iPads before iPadOS 16.4. iPhones have no
+  fullscreen for web pages at all, so the overlay never depends on it being
+  granted. A screen wake lock is held while a fullscreen timer runs, also
+  best-effort. Esc exits, as does Safari's own close button or swipe.
+- **Safari.** `html` carries its own `--paper` background, including
+  `:fullscreen` and `:-webkit-full-screen` with `!important`, because Safari's
+  built-in fullscreen style otherwise paints the page white wherever the body
+  does not reach. The timer avoids container query units and `color-mix()`
+  (or gives them a fallback), since iPads on older iPadOS lack them.
 
 ### Calendar — backed by Google Calendar
 
@@ -866,7 +881,7 @@ refresh?" tells you where the source of truth is.
 | Tasks | **Microsoft To Do** (`LifeOS` list) | ✅ | ✅ (via Microsoft) |
 | OAuth refresh tokens | Supabase `*_tokens` | ✅ | ✅ |
 | Calendar events | **Google Calendar** (read live) | ✅ (it's Google's) | ✅ |
-| Pomodoro live timer + settings, timer face + colour | Browser **cookie** (`pomodoro`) | ✅ (same browser) | ❌ |
+| Pomodoro live timer + settings, timer face, colour, ring thickness, backdrop | Browser **cookie** (`pomodoro`) | ✅ (same browser) | ❌ |
 | Dark / glass mode, accent, voice | Browser **localStorage** | ✅ (same browser) | ❌ |
 | Pinned-task flags | Browser **localStorage** (by task name) | ✅ (same browser) | ❌ |
 | Quick Note | React state (in-memory) | ❌ | ❌ |
