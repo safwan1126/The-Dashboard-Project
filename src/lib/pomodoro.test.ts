@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_BREAK_MINUTES,
   DEFAULT_POMO_MINUTES,
+  DEFAULT_RING_WIDTH,
+  RING_WIDTH_MAX,
+  RING_WIDTH_MIN,
   parsePomoState,
   serializePomoState,
   type PomoState,
@@ -17,6 +20,9 @@ describe("parsePomoState", () => {
       running: false,
       taskName: null,
       taskChosen: false,
+      face: "ring",
+      color: "",
+      ringWidth: DEFAULT_RING_WIDTH,
     });
   });
 
@@ -73,8 +79,32 @@ describe("parsePomoState", () => {
       running: true,
       taskName: "Deep work",
       taskChosen: true,
+      face: "flip",
+      color: "Clay",
+      ringWidth: 12,
     };
     const raw = serializePomoState(state, now);
     expect(parsePomoState(raw, now)).toEqual(state);
+  });
+
+  it("keeps the ring face and the app's accent for a cookie written before display options existed", () => {
+    const raw = JSON.stringify({ minutes: 25, breakMinutes: 5, phase: "focus", remain: 600 });
+    expect(parsePomoState(raw)).toMatchObject({ face: "ring", color: "", ringWidth: DEFAULT_RING_WIDTH });
+  });
+
+  it("keeps the ring thickness inside what the ring can draw", () => {
+    const width = (ringWidth: unknown) => parsePomoState(JSON.stringify({ ringWidth })).ringWidth;
+
+    expect(width(12)).toBe(12);
+    expect(width(7.6)).toBe(8);
+    // Thicker than this and the stroke would be clipped by the ring's own box.
+    expect(width(500)).toBe(RING_WIDTH_MAX);
+    expect(width(0)).toBe(RING_WIDTH_MIN);
+    expect(width("thick")).toBe(DEFAULT_RING_WIDTH);
+  });
+
+  it("falls back to the defaults for a face or colour it does not recognise", () => {
+    const raw = JSON.stringify({ face: "hourglass", color: "Chartreuse" });
+    expect(parsePomoState(raw)).toMatchObject({ face: "ring", color: "" });
   });
 });

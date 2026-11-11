@@ -25,13 +25,17 @@ import {
   type NoteRow,
 } from "@/lib/data/notes";
 import { createSingleFlight } from "@/lib/singleFlight";
-import { POMO_COOKIE, serializePomoState, type PomoState, type PomoPhase } from "@/lib/pomodoro";
+import {
+  POMO_COOKIE, RING_WIDTH_MAX, RING_WIDTH_MIN, serializePomoState,
+  type PomoState, type PomoPhase, type PomoFace, type PomoColor,
+} from "@/lib/pomodoro";
+import TimerFace from "./TimerFace";
 import { updateProfileName, changePassword, disconnectMicrosoft, disconnectGoogle } from "@/lib/settings/actions";
 import { signOut } from "@/app/auth/actions";
 import {
   CheckIcon, ChecklistIcon, ChevronDownIcon, ClockIcon, ExternalLinkIcon, FlameIcon, GearIcon,
   GoogleLogo, MicrosoftLogo, NoteIcon, PaperclipIcon, PauseIcon, PencilIcon, PinIcon, PinOffIcon,
-  PlayIcon, PlusIcon, ResetIcon, SignOutIcon, SkipIcon, SpinnerIcon, SyncIcon, TrashIcon,
+  PlayIcon, PlusIcon, ResetIcon, ExpandIcon, CollapseIcon, SignOutIcon, SkipIcon, SpinnerIcon, SyncIcon, TrashIcon,
 } from "./icons";
 
 function pad(n: number) {
@@ -97,6 +101,22 @@ const VOICES: { value: string; label: string }[] = [
   { value: "", label: "Serif" },
   { value: "Modern", label: "Modern" },
   { value: "Mono", label: "Mono" },
+];
+
+// The focus timer's own display options (see TimerFace and the
+// [data-timer-color] ramps in globals.css).
+const TIMER_FACES: { value: PomoFace; label: string }[] = [
+  { value: "ring", label: "Ring" },
+  { value: "flip", label: "Flip" },
+  { value: "digits", label: "Digits" },
+];
+const TIMER_COLORS: { value: PomoColor; label: string; swatch?: string }[] = [
+  { value: "", label: "Match app" },
+  { value: "Sage", label: "Sage", swatch: "oklch(0.625 0.050 132)" },
+  { value: "Indigo", label: "Indigo", swatch: "oklch(0.575 0.135 268)" },
+  { value: "Clay", label: "Clay", swatch: "oklch(0.635 0.115 46)" },
+  { value: "Plum", label: "Plum", swatch: "oklch(0.560 0.130 332)" },
+  { value: "Ink", label: "Ink", swatch: "var(--ink)" },
 ];
 
 // A theme choice mirrored to an attribute on <html> and to localStorage. The
@@ -966,8 +986,6 @@ export default function Dashboard({
   }, [focusByDay, heatPage]);
 
   /* ---------- pomodoro ---------- */
-  const POMO_R = 160;
-  const POMO_CIRC = 2 * Math.PI * POMO_R;
   const [pomoMinutes, setPomoMinutes] = useState(initialPomo.minutes);
   const [pomoBreakMinutes, setPomoBreakMinutes] = useState(initialPomo.breakMinutes);
   const [pomoPhase, setPomoPhase] = useState<PomoPhase>(initialPomo.phase);
@@ -979,6 +997,9 @@ export default function Dashboard({
   const [pomoRunning, setPomoRunning] = useState(initialPomo.running);
   const [pomoTaskName, setPomoTaskName] = useState<string | null>(initialPomo.taskName);
   const [pomoTaskChosen, setPomoTaskChosen] = useState(initialPomo.taskChosen);
+  const [pomoFace, setPomoFace] = useState<PomoFace>(initialPomo.face);
+  const [pomoColor, setPomoColor] = useState<PomoColor>(initialPomo.color);
+  const [pomoRingWidth, setPomoRingWidth] = useState(initialPomo.ringWidth);
   const [pomoPickerOpen, setPomoPickerOpen] = useState(false);
   const [pomoHistory, setPomoHistory] = useState<PomoSession[]>([]);
   const [pomoHistoryDays, setPomoHistoryDays] = useState(14);
@@ -1102,9 +1123,70 @@ export default function Dashboard({
       running: pomoRunning,
       taskName: pomoTaskName,
       taskChosen: pomoTaskChosen,
+      face: pomoFace,
+      color: pomoColor,
+      ringWidth: pomoRingWidth,
     }));
     document.cookie = `${POMO_COOKIE}=${value}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
-  }, [pomoMinutes, pomoBreakMinutes, pomoPhase, pomoRemain, pomoRunning, pomoTaskName, pomoTaskChosen]);
+  }, [pomoMinutes, pomoBreakMinutes, pomoPhase, pomoRemain, pomoRunning, pomoTaskName, pomoTaskChosen, pomoFace, pomoColor, pomoRingWidth]);
+
+  /* ---------- pomodoro: fullscreen ---------- */
+  // "Immersive" is the in-page takeover: the timer covers the whole window.
+  // On top of that the browser's real fullscreen is requested where it exists.
+  // Phones and embedded views often refuse it, in which case the in-page
+  // version alone still does the job.
+  const [pomoImmersive, setPomoImmersive] = useState(false);
+
+  function enterPomoImmersive() {
+    setPomoImmersive(true);
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  }
+  function exitPomoImmersive() {
+    setPomoImmersive(false);
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  }
+
+  useEffect(() => {
+    if (!pomoImmersive) return;
+    // Leaving the screen (the browser's back button still works in here)
+    // must not strand the window in fullscreen.
+    if (screen !== "pomodoro") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPomoImmersive(false);
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      return;
+    }
+    // Esc inside real fullscreen is taken by the browser and only shows up as
+    // a fullscreenchange; without real fullscreen it arrives as a keydown.
+    function onFullscreenChange() {
+      if (!document.fullscreenElement) setPomoImmersive(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && !document.fullscreenElement) setPomoImmersive(false);
+    }
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [pomoImmersive, screen]);
+
+  // Keep the display awake while a fullscreen timer is counting down. Purely
+  // best-effort: not every browser has the API, and it can be refused.
+  useEffect(() => {
+    if (!pomoImmersive || !pomoRunning || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let cancelled = false;
+    navigator.wakeLock
+      .request("screen")
+      .then((l) => { if (cancelled) l.release().catch(() => {}); else lock = l; })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      lock?.release().catch(() => {});
+    };
+  }, [pomoImmersive, pomoRunning]);
 
   function completeCurrentPhase() {
     if (pomoTimerRef.current) clearInterval(pomoTimerRef.current);
@@ -1147,11 +1229,6 @@ export default function Dashboard({
     }
     setPomoBreakCustomInput("");
   }
-
-  const pomoTime = `${pad(Math.floor(pomoRemain / 60))}:${pad(pomoRemain % 60)}`;
-  const pomoOffset = (POMO_CIRC * (pomoRemain / POMO_TOTAL)).toFixed(1);
-  const POMO_SIZE = POMO_R * 2 + 20;
-  const POMO_CX = POMO_SIZE / 2;
 
   /* ---------- "Up next" widget: nearest upcoming (or in-progress) event ---------- */
   const nowTotalSec = now ? now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() : 0;
@@ -2071,27 +2148,33 @@ export default function Dashboard({
               </div>
             </div>
           )}
-          <div className="pomo-page">
+          <div
+            className={"pomo-page" + (pomoImmersive ? " immersive" : "")}
+            data-phase={pomoPhase}
+            data-timer-color={pomoColor || undefined}
+          >
+            <button
+              className="pomo-fs-btn"
+              aria-label={pomoImmersive ? "Exit fullscreen" : "Fullscreen"}
+              title={pomoImmersive ? "Exit fullscreen (Esc)" : "Fullscreen"}
+              onClick={pomoImmersive ? exitPomoImmersive : enterPomoImmersive}
+            >
+              {pomoImmersive ? <CollapseIcon /> : <ExpandIcon />}
+            </button>
             <div className="pomo-page-body">
-              <div className="pomo-page-ring">
-                <svg width={POMO_SIZE} height={POMO_SIZE} viewBox={`0 0 ${POMO_SIZE} ${POMO_SIZE}`} aria-hidden="true">
-                  <circle cx={POMO_CX} cy={POMO_CX} r={POMO_R} fill="none" stroke="oklch(var(--tint) / 0.08)" strokeWidth="4" />
-                  <circle
-                    cx={POMO_CX} cy={POMO_CX} r={POMO_R} fill="none" stroke="var(--sage)" strokeWidth="4"
-                    strokeLinecap="round" strokeDasharray={POMO_CIRC} strokeDashoffset={pomoOffset}
-                    style={{ transform: "rotate(-90deg)", transformOrigin: "center" }}
-                  />
-                </svg>
-                <div className="pomo-page-center">
-                  <div className="pomo-page-mode">{pomoPhase === "break" ? "Break" : "Focus"}</div>
-                  <div className="pomo-page-time num">{pomoTime}</div>
-                  {pomoPhase === "focus" && pomoTaskChosen && pomoTaskName && (
-                    <div className="pomo-page-task-label">{pomoTaskName}</div>
-                  )}
-                </div>
-              </div>
+              <TimerFace
+                face={pomoFace}
+                remain={pomoRemain}
+                total={POMO_TOTAL}
+                phase={pomoPhase}
+                task={pomoPhase === "focus" && pomoTaskChosen ? pomoTaskName : null}
+                ringWidth={pomoRingWidth}
+              />
               {pomoSettingsOpen && (
                 <div className="pomo-settings">
+                  {/* Changing a duration resets the timer, so those controls
+                      lock while it runs. Display options never do. */}
+                  <fieldset className="pomo-settings-durations" disabled={pomoRunning}>
                   <div className="pomo-settings-group">
                   <div className="pomo-settings-label"><span className="dot" />Focus duration (minutes)</div>
                   <div className="pomo-settings-presets">
@@ -2162,6 +2245,62 @@ export default function Dashboard({
                     </button>
                   </div>
                   </div>
+                  </fieldset>
+                  {pomoRunning && <p className="pomo-settings-note">Pause the timer to change durations.</p>}
+                  <div className="pomo-settings-group">
+                    <div className="pomo-settings-label">Display</div>
+                    <div className="pomo-display-row">
+                      <span className="pomo-display-name">Face</span>
+                      <div className="seg" role="radiogroup" aria-label="Timer face">
+                        {TIMER_FACES.map((f) => (
+                          <button
+                            key={f.value}
+                            role="radio"
+                            aria-checked={pomoFace === f.value}
+                            className={"seg-btn" + (pomoFace === f.value ? " active" : "")}
+                            onClick={() => setPomoFace(f.value)}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Only the ring has a stroke to thicken. */}
+                    {pomoFace === "ring" && (
+                      <div className="pomo-display-row">
+                        <label className="pomo-display-name" htmlFor="pomo-ring-width">Ring thickness</label>
+                        <input
+                          id="pomo-ring-width"
+                          className="range"
+                          type="range"
+                          min={RING_WIDTH_MIN}
+                          max={RING_WIDTH_MAX}
+                          step={1}
+                          value={pomoRingWidth}
+                          onChange={(e) => setPomoRingWidth(Number(e.target.value))}
+                        />
+                      </div>
+                    )}
+                    <div className="pomo-display-row">
+                      <span className="pomo-display-name">Colour</span>
+                      <div className="swatches" role="radiogroup" aria-label="Timer colour">
+                        {TIMER_COLORS.map((c) => (
+                          <button
+                            key={c.label}
+                            role="radio"
+                            aria-checked={pomoColor === c.value}
+                            aria-label={c.label}
+                            title={c.label}
+                            className={"swatch" + (c.swatch ? "" : " swatch-auto") + (pomoColor === c.value ? " active" : "")}
+                            style={c.swatch ? { background: c.swatch } : undefined}
+                            onClick={() => setPomoColor(c.value)}
+                          >
+                            {c.swatch ? null : "App"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
               <div className="pomo-page-ctrl">
@@ -2190,7 +2329,7 @@ export default function Dashboard({
                 <button
                   className={"pbtn-reset pomo-page-reset" + (pomoSettingsOpen ? " active" : "")}
                   aria-label="Settings" title="Timer settings"
-                  disabled={pomoRunning}
+                  aria-expanded={pomoSettingsOpen}
                   onClick={() => { setPomoSettingsOpen(o => !o); setPomoCustomInput(""); }}
                 >
                   <GearIcon />

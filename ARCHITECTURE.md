@@ -227,6 +227,7 @@ The Dashboard Project/
    │
    ├─ components/
    │  ├─ Dashboard.tsx         # THE app UI — one large client component, every screen
+   │  ├─ TimerFace.tsx         # The focus timer's display: ring, flip clock or large digits
    │  └─ icons.tsx             # Every SVG icon, as small components that take SVG props
    │
    └─ lib/                     # Non-UI logic, grouped by concern
@@ -610,6 +611,26 @@ completes, it auto-starts a break; when the break completes, it resets to focus.
 - The bottom of the Pomodoro screen renders a **per-day timeline** (a 6am→midnight
   track) of past sessions, color-coded by task, with a legend. The timer settings
   panel lets you pick focus/break durations (presets + a custom 1–240 input).
+  Changing a duration resets the timer, so those controls lock while it runs.
+- **Display options** live in the same panel and can be changed at any time:
+  - *Face* — `ring` (the original, and the default), `flip` (a flip clock) or
+    `digits` (large numerals). `TimerFace.tsx` draws all three from the same
+    props, so every face shows the phase, the time left, the task and the
+    progress.
+  - *Ring thickness* — a slider shown for the ring face, from a hairline to
+    as thick as fits (`RING_WIDTH_MIN`–`RING_WIDTH_MAX`, default 4).
+  - *Colour* — the timer's own accent, set as `data-timer-color` on the
+    `.pomo-page` element. It reuses the app's accent ramps scoped to that one
+    element (see the theming section), plus a monochrome `Ink`. Unset means
+    "match the app". On a break the progress mark turns rose in every colour.
+  All three are stored in the `pomodoro` cookie alongside the timer, for the same
+  reason the timer is: the server can then render the chosen face directly.
+  `parsePomoState` falls back to the defaults for any value it doesn't know.
+- **Fullscreen** (the button at the top right of the screen) makes the timer
+  take over the window: `.pomo-page.immersive` is a fixed overlay with larger
+  faces. The browser's real fullscreen is requested on top where it exists, and
+  a screen wake lock is held while a fullscreen timer is running; both are
+  best-effort and the overlay works without them. Esc exits.
 
 ### Calendar — backed by Google Calendar
 
@@ -748,8 +769,10 @@ Three rules keep the tokens honest:
   `--rose-deep` are the ones safe as text. Anything sitting *on* an accent fill
   uses `--on-accent`, which flips between light and dark with the mood.
 - **Type scale.** Seven sizes, `--t-xs` (11px) to `--t-display` (the clock).
-  Every `font-size` in `globals.css` is one of them; the only exception is the
-  brand wordmark, which is sized as artwork.
+  Every `font-size` in `globals.css` is one of them, with two exceptions: the
+  brand wordmark, which is sized as artwork, and the focus timer's faces, which
+  are sized from their own box (`--ring`, `--flip-h`, `--digits`) so the same
+  face can sit in the page or fill a screen.
 - **Spacing.** A 4px grid, `--s-1` (4px) to `--s-8` (40px), used for every gap,
   padding and margin. A raw pixel value left in the file is a component
   dimension (a 32px button, a 5px bar), not spacing.
@@ -798,6 +821,10 @@ Choosing an accent pins it in both moods, so each one has a light ramp and a
 `[data-mood="Charcoal"][data-accent="…"]` dark ramp. Add a new accent by adding
 both blocks and an entry in `ACCENTS` in `Dashboard.tsx`.
 
+Each ramp is also selectable as `[data-timer-color="…"]` on any element, which
+re-points the accent variables for that subtree only. The focus timer uses this
+to carry its own colour without changing the app's.
+
 ### The no-flash theme script (clever bit)
 
 Theme preferences (dark, glass, accent, voice) are stored in `localStorage`. But `localStorage` isn't
@@ -839,7 +866,7 @@ refresh?" tells you where the source of truth is.
 | Tasks | **Microsoft To Do** (`LifeOS` list) | ✅ | ✅ (via Microsoft) |
 | OAuth refresh tokens | Supabase `*_tokens` | ✅ | ✅ |
 | Calendar events | **Google Calendar** (read live) | ✅ (it's Google's) | ✅ |
-| Pomodoro live timer + settings | Browser **cookie** (`pomodoro`) | ✅ (same browser) | ❌ |
+| Pomodoro live timer + settings, timer face + colour | Browser **cookie** (`pomodoro`) | ✅ (same browser) | ❌ |
 | Dark / glass mode, accent, voice | Browser **localStorage** | ✅ (same browser) | ❌ |
 | Pinned-task flags | Browser **localStorage** (by task name) | ✅ (same browser) | ❌ |
 | Quick Note | React state (in-memory) | ❌ | ❌ |

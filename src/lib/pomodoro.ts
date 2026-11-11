@@ -9,6 +9,21 @@ export const DEFAULT_BREAK_MINUTES = 5;
 
 export type PomoPhase = "focus" | "break";
 
+// How the timer is drawn. "ring" is the original face and stays the default.
+export const POMO_FACES = ["ring", "flip", "digits"] as const;
+export type PomoFace = (typeof POMO_FACES)[number];
+
+// The timer's own colour. Empty means "match the app's accent"; the named ones
+// are the same ramps the Accent setting uses, plus a monochrome "Ink".
+// Stroke of the ring face, in the ring's own units (its box is 340 across).
+// 4 is the original hairline; 20 is as thick as fits inside that box.
+export const RING_WIDTH_MIN = 2;
+export const RING_WIDTH_MAX = 20;
+export const DEFAULT_RING_WIDTH = 4;
+
+export const POMO_COLORS = ["", "Sage", "Indigo", "Clay", "Plum", "Ink"] as const;
+export type PomoColor = (typeof POMO_COLORS)[number];
+
 export type PomoState = {
   minutes: number;
   breakMinutes: number;
@@ -17,6 +32,11 @@ export type PomoState = {
   running: boolean;
   taskName: string | null;
   taskChosen: boolean;
+  // Display choices ride in the same cookie as the timer so the server renders
+  // the chosen face straight away instead of flashing the default one.
+  face: PomoFace;
+  color: PomoColor;
+  ringWidth: number;
 };
 
 type StoredPomo = {
@@ -27,6 +47,9 @@ type StoredPomo = {
   running?: boolean;
   taskName?: string | null;
   taskChosen?: boolean;
+  face?: string;
+  color?: string;
+  ringWidth?: number;
   // Absolute epoch ms when a running timer hits zero; lets us recompute the
   // remaining seconds against the current clock instead of freezing.
   endsAt?: number | null;
@@ -41,6 +64,9 @@ function defaultState(): PomoState {
     running: false,
     taskName: null,
     taskChosen: false,
+    face: "ring",
+    color: "",
+    ringWidth: DEFAULT_RING_WIDTH,
   };
 }
 
@@ -69,6 +95,14 @@ export function parsePomoState(raw: string | undefined | null, now = Date.now())
   const phase: PomoPhase = s.phase === "break" ? "break" : "focus";
   const taskChosen = !!s.taskChosen;
   const taskName = taskChosen ? (s.taskName ?? null) : null;
+  // A cookie is user-editable and outlives releases, so anything unrecognised
+  // falls back to the default rather than reaching the UI.
+  const face = POMO_FACES.find((f) => f === s.face) ?? "ring";
+  const color = POMO_COLORS.find((c) => c === s.color) ?? "";
+  const ringWidth =
+    typeof s.ringWidth === "number" && Number.isFinite(s.ringWidth)
+      ? Math.min(RING_WIDTH_MAX, Math.max(RING_WIDTH_MIN, Math.round(s.ringWidth)))
+      : DEFAULT_RING_WIDTH;
 
   let remain = (phase === "break" ? breakMinutes : minutes) * 60;
   let running = false;
@@ -85,7 +119,7 @@ export function parsePomoState(raw: string | undefined | null, now = Date.now())
     remain = s.remain;
   }
 
-  return { minutes, breakMinutes, phase, remain, running, taskName, taskChosen };
+  return { minutes, breakMinutes, phase, remain, running, taskName, taskChosen, face, color, ringWidth };
 }
 
 // Serialize live state for the cookie, anchoring a running timer to an absolute
@@ -99,6 +133,9 @@ export function serializePomoState(s: PomoState, now = Date.now()): string {
     running: s.running,
     taskName: s.taskName,
     taskChosen: s.taskChosen,
+    face: s.face,
+    color: s.color,
+    ringWidth: s.ringWidth,
     endsAt: s.running ? now + s.remain * 1000 : null,
   };
   return JSON.stringify(stored);

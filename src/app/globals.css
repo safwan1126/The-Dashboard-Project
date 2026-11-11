@@ -127,44 +127,67 @@ html[data-mood="Charcoal"] {
 
 /* ============ THEME · ACCENT ============ */
 /* Unset means "auto": sage on paper, blue on Charcoal. Choosing an accent
-   pins it in both moods, which is why each one carries a dark ramp too. */
-html[data-accent="Indigo"] {
+   pins it in both moods, which is why each one carries a dark ramp too.
+
+   The same ramps can be scoped to one element with data-timer-color, which is
+   how the focus timer takes a colour of its own without touching the app's. */
+[data-timer-color="Sage"] {
+  --sage:       oklch(0.625 0.050 132);
+  --sage-deep:  oklch(0.50 0.055 130);
+  --sage-soft:  oklch(0.88 0.040 132);
+  --sage-faint: oklch(0.93 0.028 132);
+}
+/* Monochrome: built from the ink ramp, so it follows the mood on its own. */
+[data-timer-color="Ink"] {
+  --sage:       var(--ink-2);
+  --sage-deep:  var(--ink);
+  --sage-soft:  oklch(var(--tint) / 0.18);
+  --sage-faint: oklch(var(--tint) / 0.07);
+}
+html[data-accent="Indigo"],
+[data-timer-color="Indigo"] {
   --sage:       oklch(0.575 0.135 268);
   --sage-deep:  oklch(0.495 0.150 270);
   --sage-soft:  oklch(0.86 0.070 272);
   --sage-faint: oklch(0.93 0.040 272);
 }
-html[data-accent="Clay"] {
+html[data-accent="Clay"],
+[data-timer-color="Clay"] {
   --sage:       oklch(0.635 0.115 46);
   --sage-deep:  oklch(0.50 0.115 42);
   --sage-soft:  oklch(0.86 0.066 52);
   --sage-faint: oklch(0.93 0.040 52);
 }
-html[data-accent="Plum"] {
+html[data-accent="Plum"],
+[data-timer-color="Plum"] {
   --sage:       oklch(0.560 0.130 332);
   --sage-deep:  oklch(0.485 0.140 332);
   --sage-soft:  oklch(0.86 0.068 335);
   --sage-faint: oklch(0.93 0.042 335);
 }
-html[data-mood="Charcoal"][data-accent="Sage"] {
+html[data-mood="Charcoal"][data-accent="Sage"],
+html[data-mood="Charcoal"] [data-timer-color="Sage"] {
   --sage:       oklch(0.76 0.070 135);
   --sage-deep:  oklch(0.84 0.065 135);
   --sage-soft:  oklch(0.40 0.040 135);
   --sage-faint: oklch(0.30 0.028 135);
 }
-html[data-mood="Charcoal"][data-accent="Indigo"] {
+html[data-mood="Charcoal"][data-accent="Indigo"],
+html[data-mood="Charcoal"] [data-timer-color="Indigo"] {
   --sage:       oklch(0.74 0.120 272);
   --sage-deep:  oklch(0.82 0.105 272);
   --sage-soft:  oklch(0.40 0.070 272);
   --sage-faint: oklch(0.30 0.045 272);
 }
-html[data-mood="Charcoal"][data-accent="Clay"] {
+html[data-mood="Charcoal"][data-accent="Clay"],
+html[data-mood="Charcoal"] [data-timer-color="Clay"] {
   --sage:       oklch(0.76 0.110 50);
   --sage-deep:  oklch(0.84 0.095 52);
   --sage-soft:  oklch(0.40 0.060 50);
   --sage-faint: oklch(0.30 0.040 50);
 }
-html[data-mood="Charcoal"][data-accent="Plum"] {
+html[data-mood="Charcoal"][data-accent="Plum"],
+html[data-mood="Charcoal"] [data-timer-color="Plum"] {
   --sage:       oklch(0.74 0.120 335);
   --sage-deep:  oklch(0.82 0.105 335);
   --sage-soft:  oklch(0.40 0.070 335);
@@ -174,11 +197,15 @@ html[data-mood="Charcoal"][data-accent="Plum"] {
 /* ============ THEME · VOICE ============ */
 html[data-voice="Modern"] { --serif: "Hanken Grotesk", system-ui, sans-serif; }
 html[data-voice="Modern"] .bigclock,
-html[data-voice="Modern"] .pomo-page-time { font-weight: 700; letter-spacing: -0.03em; }
+html[data-voice="Modern"] .pomo-page-time,
+html[data-voice="Modern"] .timer-digits-time { font-weight: 700; letter-spacing: -0.03em; }
+html[data-voice="Modern"] .flip-digit { font-weight: 700; }
 html[data-voice="Modern"] .note-body { line-height: 1.6; }
 html[data-voice="Mono"] { --serif: "JetBrains Mono", ui-monospace, monospace; }
 html[data-voice="Mono"] .bigclock,
-html[data-voice="Mono"] .pomo-page-time { font-weight: 500; letter-spacing: -0.05em; }
+html[data-voice="Mono"] .pomo-page-time,
+html[data-voice="Mono"] .timer-digits-time { font-weight: 500; letter-spacing: -0.05em; }
+html[data-voice="Mono"] .flip-digit { font-weight: 500; }
 html[data-voice="Mono"] .note-body { line-height: 1.7; }
 
 /* ============ THEME · GLASS (data-glass="on") ============ */
@@ -827,22 +854,132 @@ th.tracker-name-col { font-size: var(--t-xs); font-weight: 600; color: var(--ink
 .pomo-btn-wrap { position: relative; flex: 1; }
 .pomo-btn-wrap .pbtn-main { width: 100%; }
 
-.pomo-page { display: flex; flex-direction: column; padding: var(--s-7) 0 var(--s-8); }
+/* The timer's faces are the one place type is not taken from the scale: each
+   is sized from its own box (--ring, --flip-h, --digits), so the same face can
+   sit in the page or fill a screen by changing one length. */
+.pomo-page {
+  position: relative;
+  display: flex; flex-direction: column; padding: var(--s-7) 0 var(--s-8);
+  --ring: min(340px, 80vw);
+  --flip-h: clamp(84px, 21vw, 128px);
+  --digits: clamp(80px, 22vw, 168px);
+  --timer-bar: min(420px, 80vw);
+  /* What marks progress: the timer's colour while focusing, rose on a break. */
+  --timer-mark: var(--sage);
+  --flip-bg: var(--sage-deep);
+  --flip-fg: var(--on-accent);
+  --flip-dot: var(--sage-deep);
+}
+.pomo-page[data-phase="break"] { --timer-mark: var(--rose); }
+/* A wall of light accent is harsh on near-black, so the cards go dark there. */
+html[data-mood="Charcoal"] .pomo-page { --flip-bg: var(--sage-faint); --flip-fg: var(--sage-deep); --flip-dot: var(--sage-soft); }
 .pomo-page-body { display: flex; flex-direction: column; align-items: center; flex: 1; justify-content: center; }
-/* The ring scales down with the viewport; everything inside is sized from it. */
-.pomo-page-ring { position: relative; width: min(340px, 80vw); margin-bottom: var(--s-8); }
+
+/* ---- fullscreen ---- */
+.pomo-fs-btn {
+  position: absolute; top: var(--s-2); right: 0; z-index: 1;
+  width: 36px; height: 36px; border-radius: var(--radius-xs);
+  border: 1px solid var(--line); background: transparent; color: var(--ink-3);
+  cursor: pointer; display: grid; place-items: center;
+  transition: background .15s, color .15s;
+}
+.pomo-fs-btn:hover { background: oklch(var(--tint) / 0.04); color: var(--ink); }
+.pomo-fs-btn svg { width: 16px; height: 16px; }
+/* The timer takes over the window: nav and history are covered, the faces
+   grow, and a wash of the timer's colour sits behind them. */
+.pomo-page.immersive {
+  position: fixed; inset: 0; z-index: 90; overflow-y: auto;
+  padding: var(--s-8) var(--gutter);
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 42%, color-mix(in oklch, var(--sage-faint) 85%, transparent), transparent 72%),
+    var(--paper);
+  --ring: min(620px, 84vw, 66vh);
+  --flip-h: min(300px, 21vw, 38vh);
+  --digits: min(360px, 26vw, 44vh);
+  --timer-bar: min(640px, 72vw);
+}
+/* Auto margins centre the timer when it fits and still let it scroll when a
+   short window (or the open settings panel) makes it taller than the screen. */
+.pomo-page.immersive .pomo-page-body { flex: none; margin: auto 0; }
+.pomo-page.immersive .pomo-fs-btn { position: fixed; top: var(--s-5); right: var(--gutter); z-index: 91; }
+
+/* ---- face: ring ---- */
+/* The ring is a size container, so its label, time and task scale with it. */
+.pomo-page-ring { position: relative; width: var(--ring); margin-bottom: var(--s-8); container-type: inline-size; }
 .pomo-page-ring svg { display: block; width: 100%; height: auto; }
+.timer-ring-mark { stroke: var(--timer-mark); transition: stroke .3s; }
 .pomo-page-center {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
   width: 76%; text-align: center; pointer-events: none;
 }
 .pomo-page-mode { font-size: var(--t-sm); font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); margin-bottom: var(--s-2); }
-.pomo-page-time { font-family: var(--serif); font-size: var(--t-display); font-weight: 500; letter-spacing: 0.01em; color: var(--ink); line-height: 1; }
+.pomo-page-ring .pomo-page-mode { font-size: clamp(11px, 3.7cqi, 22px); }
+.pomo-page-time { font-family: var(--serif); font-size: 22cqi; font-weight: 500; letter-spacing: 0.01em; color: var(--ink); line-height: 1; }
 .pomo-page-task-label {
   font-size: var(--t-base); line-height: 1.4; color: var(--ink-3); margin-top: var(--s-3);
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
+.pomo-page-ring .pomo-page-task-label { font-size: clamp(13px, 4.1cqi, 24px); }
+
+/* ---- faces: flip and digits ---- */
+.timer-face {
+  display: flex; flex-direction: column; align-items: center;
+  max-width: 100%; margin-bottom: var(--s-8); text-align: center;
+}
+.timer-face .pomo-page-mode { margin-bottom: var(--s-4); }
+.timer-face .pomo-page-task-label { margin-top: var(--s-4); max-width: var(--timer-bar); }
+.pomo-page.immersive .timer-face .pomo-page-mode { font-size: var(--t-base); margin-bottom: var(--s-6); }
+.pomo-page.immersive .timer-face .pomo-page-task-label { font-size: var(--t-lg); margin-top: var(--s-6); }
+.timer-progress {
+  width: var(--timer-bar); max-width: 100%; height: 5px; margin-top: var(--s-6);
+  border-radius: var(--radius-pill); background: oklch(var(--tint) / 0.08); overflow: hidden;
+}
+.timer-progress > i {
+  display: block; height: 100%; border-radius: var(--radius-pill);
+  background: var(--timer-mark); transition: width 1s linear, background .3s;
+}
+
+.timer-digits-time {
+  font-family: var(--serif); font-size: var(--digits); font-weight: 500;
+  line-height: 1; letter-spacing: -0.01em; color: var(--ink);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.flip-clock { display: flex; align-items: center; gap: calc(var(--flip-h) * 0.09); }
+.flip-group { display: flex; gap: calc(var(--flip-h) * 0.06); }
+.flip-digit {
+  position: relative; display: block; flex: 0 0 auto;
+  width: calc(var(--flip-h) * 0.68); height: var(--flip-h);
+  perspective: calc(var(--flip-h) * 4);
+  font-family: var(--serif); font-size: calc(var(--flip-h) * 0.72); font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--flip-fg);
+}
+/* The split across the middle of the card. Drawn dark, on top, so it reads as
+   a seam in both moods rather than as a line struck through the digit. */
+.flip-digit::after {
+  content: ""; position: absolute; left: 0; right: 0; top: calc(50% - 0.5px);
+  height: 1px; z-index: 3; background: oklch(0 0 0 / 0.30);
+}
+/* Each half is a window onto the full-height digit behind it. */
+.flip-half {
+  position: absolute; left: 0; right: 0; height: 50%;
+  overflow: hidden; background: var(--flip-bg);
+  backface-visibility: hidden; transition: background .3s, color .3s;
+}
+.flip-half > span { display: block; height: var(--flip-h); line-height: var(--flip-h); text-align: center; }
+.flip-top { top: 0; border-radius: calc(var(--flip-h) * 0.08) calc(var(--flip-h) * 0.08) 0 0; }
+.flip-bottom { bottom: 0; border-radius: 0 0 calc(var(--flip-h) * 0.08) calc(var(--flip-h) * 0.08); }
+.flip-bottom > span { margin-top: calc(var(--flip-h) / -2); }
+/* The old top half falls forward, then the new bottom half lands. */
+.flip-flap-top { z-index: 2; transform-origin: 50% 100%; animation: flip-top .26s ease-in forwards; }
+.flip-flap-bottom { z-index: 2; transform-origin: 50% 0; transform: rotateX(90deg); animation: flip-bottom .26s ease-out .26s forwards; }
+@keyframes flip-top { to { transform: rotateX(-90deg); } }
+@keyframes flip-bottom { from { transform: rotateX(90deg); } to { transform: rotateX(0deg); } }
+.flip-colon { display: flex; flex-direction: column; gap: calc(var(--flip-h) * 0.16); }
+.flip-colon i { width: calc(var(--flip-h) * 0.085); height: calc(var(--flip-h) * 0.085); border-radius: 50%; background: var(--flip-dot); transition: background .3s; }
+
 .pomo-page-ctrl { display: flex; gap: var(--s-3); width: 100%; max-width: 380px; }
 .pomo-page-btn { font-size: var(--t-md); padding: var(--s-4); }
 .pomo-page-reset { width: 56px; height: 56px; flex-shrink: 0; }
@@ -890,6 +1027,28 @@ th.tracker-name-col { font-size: var(--t-xs); font-weight: 600; color: var(--ink
 .pomo-settings-apply:disabled { opacity: 0.4; cursor: not-allowed; }
 .pomo-settings-group.rose .pomo-settings-apply { background: var(--rose-faint); color: var(--rose-deep); }
 .pomo-settings-group.rose .pomo-settings-apply:hover:not(:disabled) { background: var(--rose-soft); }
+/* Durations lock while the timer runs; the display options below do not. */
+.pomo-settings-durations { border: none; min-width: 0; transition: opacity .15s; }
+.pomo-settings-durations:disabled { opacity: 0.45; }
+.pomo-settings-durations:disabled button, .pomo-settings-durations:disabled input { cursor: not-allowed; }
+.pomo-settings-note { font-size: var(--t-sm); color: var(--ink-3); margin-top: var(--s-3); }
+.pomo-settings > .pomo-settings-group { border-top: 1px solid var(--line); margin-top: var(--s-4); padding-top: var(--s-4); }
+.pomo-display-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--s-2) var(--s-3); }
+.pomo-display-row + .pomo-display-row { margin-top: var(--s-3); }
+.pomo-display-name { font-size: var(--t-sm); font-weight: 600; color: var(--ink-2); }
+/* A native slider, tinted with the timer's colour. */
+.range { flex: 0 1 180px; min-width: 120px; height: 22px; margin: 0; accent-color: var(--sage-deep); cursor: pointer; }
+.swatches { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-3); }
+.swatch {
+  width: 22px; height: 22px; border-radius: 50%; border: none; padding: 0; cursor: pointer;
+  box-shadow: 0 0 0 1px var(--line); transition: box-shadow .15s;
+}
+.swatch.active { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--ink-2); }
+.swatch-auto {
+  width: auto; padding: 0 var(--s-2); border-radius: var(--radius-pill);
+  background: oklch(var(--tint) / 0.06);
+  font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.04em; color: var(--ink-2);
+}
 
 /* ---- session timeline ---- */
 .pomo-tl { max-width: 680px; margin: var(--s-8) auto 0; }
