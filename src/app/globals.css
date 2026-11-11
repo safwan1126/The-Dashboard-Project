@@ -148,12 +148,20 @@ html[data-mood="Charcoal"] {
   --sage-soft:  oklch(0.88 0.040 132);
   --sage-faint: oklch(0.93 0.028 132);
 }
-/* Monochrome: built from the ink ramp, so it follows the mood on its own. */
+/* Monochrome. Its tints are solid greys rather than translucent ink, like
+   every other ramp: the flip cards and the backdrops stack layers of these
+   shades, and translucent layers show through each other — a flipping card
+   showed its old and new digit at once, and Tide drew a pale stripe where its
+   swell crossed the water. */
 [data-timer-color="Ink"] {
   --sage:       var(--ink-2);
   --sage-deep:  var(--ink);
-  --sage-soft:  oklch(var(--tint) / 0.18);
-  --sage-faint: oklch(var(--tint) / 0.07);
+  --sage-soft:  oklch(0.86 0.008 85);
+  --sage-faint: oklch(0.92 0.008 88);
+}
+html[data-mood="Charcoal"] [data-timer-color="Ink"] {
+  --sage-soft:  oklch(0.40 0.003 264);
+  --sage-faint: oklch(0.28 0.003 264);
 }
 html[data-accent="Indigo"],
 [data-timer-color="Indigo"] {

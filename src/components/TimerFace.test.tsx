@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import TimerFace from "./TimerFace";
 
@@ -7,6 +7,17 @@ import TimerFace from "./TimerFace";
 afterEach(cleanup);
 
 const base = { remain: 19 * 60 + 43, total: 25 * 60, phase: "focus" as const, task: "Write the spec" };
+
+// jsdom has no AnimationEvent, so React listens for WebKit's prefixed event
+// name there instead of the standard one. Send both, as a browser would send
+// whichever one it uses.
+function finishAnimation(el: Element) {
+  act(() => {
+    for (const type of ["animationend", "webkitAnimationEnd"]) {
+      el.dispatchEvent(new Event(type, { bubbles: true }));
+    }
+  });
+}
 
 // The digit each flip card currently shows on its (static) top half.
 function cardDigits() {
@@ -61,6 +72,19 @@ describe("TimerFace", () => {
     // flap carries the new one.
     expect(cards[3].querySelector(".flip-flap-top")).toHaveTextContent("3");
     expect(cards[3].querySelector(".flip-flap-bottom")).toHaveTextContent("2");
+  });
+
+  it("settles back to two plain halves once a flip has landed", () => {
+    const { rerender } = render(<TimerFace face="flip" {...base} />);
+    rerender(<TimerFace face="flip" {...base} remain={base.remain - 1} />);
+
+    const card = document.querySelectorAll(".flip-digit")[3];
+    finishAnimation(card.querySelector(".flip-flap-bottom")!);
+
+    // No flaps left stacked over the halves, and both halves show the new digit.
+    expect(card.querySelector(".flip-flap-top")).toBeNull();
+    expect(card.querySelector(".flip-flap-bottom")).toBeNull();
+    expect(card.querySelector(".flip-bottom")).toHaveTextContent("2");
   });
 
   it("carries across the colon when the seconds roll over", () => {

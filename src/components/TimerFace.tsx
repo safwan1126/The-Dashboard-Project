@@ -20,7 +20,9 @@ function pad(n: number) {
 
 // One card of the flip clock. When the digit changes, the old top half falls
 // away to reveal the new one, then the new bottom half swings down over the
-// old. The flaps are keyed by the digit so the animation restarts each time.
+// old. The flaps are keyed by the digit so the animation restarts each time,
+// and once the bottom flap has landed the card settles back to two plain
+// halves, so no flap lingers stacked on top of another.
 function FlipDigit({ value }: { value: string }) {
   // The previous digit is derived during render, React's pattern for state
   // that follows a prop, so the flaps have something to fall away from.
@@ -39,7 +41,13 @@ function FlipDigit({ value }: { value: string }) {
       {flipping && (
         <>
           <span key={`t${current}`} className="flip-half flip-top flip-flap-top"><span>{previous}</span></span>
-          <span key={`b${current}`} className="flip-half flip-bottom flip-flap-bottom"><span>{current}</span></span>
+          <span
+            key={`b${current}`}
+            className="flip-half flip-bottom flip-flap-bottom"
+            onAnimationEnd={() => setPrevious(current)}
+          >
+            <span>{current}</span>
+          </span>
         </>
       )}
     </span>
